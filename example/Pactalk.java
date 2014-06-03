@@ -17,8 +17,12 @@ public class Pactalk{
 
 		final PacswitchClient cli=new PacswitchClient(){
 			@Override
-			public void pacOnDataReceived(byte[] buffer){ 
-				try{ System.out.println(new String(buffer,ENC)); }
+			public void pacOnDataReceived(String sender,byte[] buffer){ 
+				try{ 
+					System.out.print(sender);
+					System.out.print(": ");
+					System.out.println(new String(buffer,ENC)); 
+				}
 				catch(UnsupportedEncodingException e){ e.printStackTrace(); }
 			}
 		};
@@ -31,7 +35,7 @@ public class Pactalk{
 			cli.pacReceiveAsync();
 			Scanner scanner = new Scanner(System.in);
 			while(true){ 
-				String s=scanner.next();
+				String s=scanner.nextLine();
 				try{ cli.pacSendData(s.getBytes(ENC),recv); }
 				catch(UnsupportedEncodingException e){ e.printStackTrace(); }
 			}
