@@ -8,16 +8,64 @@ requiring your account to access.
 
 # Features:
 - Processing bandwidth about 30MB/s [lo interface speed test]
-- Simple protocol that only takes about 50 lines to implement
-a client with C language.
-- C/Java/Python API provided.
+- Simple protocol that only takes about 50 lines to implement a client with C language.
+- C/Java API provided.
 - Multiple kinds of clients, multiple logins with same account.
 - Telnet administration.
 
+# Getting Started
+You need a server that runs python interpretor and twisted and
+Mysql. Then you setup a data table to store user accounts.
+After that, configure pacswitch following instructions
+listed in Configuration section at very beginning of
+src/pacswitch.py. Last, get your brand new pacswitch 
+server running.
+
+Now that you've got it running, no matter Android SDK or 
+OpenGL with which you are working, continue reading about our 
+Client API usage.
+
 # Client API
+After you have a handy pacswitch server. Here's how to build a
+client with our API.
+
+- Download or fork this repository.
+- Copy API into your project.
+- Initiate a connection.
+- Bind pacOnDataReceived method.
+- Start an event loop.
+- If you are not familiar with stuff, see example/Pactalk.java
+for example.
+
+## For C
+API
+
+	bin/libpacswitchcli.a
+	src/client api/pacswitchcli.h
+
+1. Call "pacInit" to initiate a connection.
+2. Call "pacOnDataReceived" to bind a handler.
+3. Create subprocess or another thread for the event loop.
+4. Call "pacLoop" to start an event loop.
+5. Call "pacSendData" whenever you like to send data.
+6. Call "pacClose" to socket.
+7. Compile with "gcc -O2 -Wall -Wno-unused-result -o yourclient yourclient.c libpacswitchcli.a"
+
+## For Java
+API
+
+	src/client api/PacswitchClient.java
+
+1. Subclass "PacswitchClient" and implement "pacOnDataReceived" to handle response data.
+2. Call "pacInit" to initiate a connection.
+3. Call "pacReceiveAsync" to start an event loop.
+4. Call "pacSendData" whenever you like to send data.
+5. Call "pacClose" to close connection.
+
+# Protocol
 Documentation will come soon.
 
-# C Example (Chatting client)
+## C Example (Chatting client)
 
 	//gcc -O2 -Wall -Wno-unused-result -o pactalk2 pactalk2.c libpacswitchcli.a
 	#include <stdio.h>
@@ -76,7 +124,7 @@ Documentation will come soon.
 		return 0;
 	}
 
-# Java Example (Chatting client)
+## Java Example (Chatting client)
 
 	import com.aleozlx.pacswitch.PacswitchClient;
 	import java.lang.*;
@@ -115,7 +163,8 @@ Documentation will come soon.
 
 			try{
 				//The same as pacLoop(), but in asynchronous way.
-				cli.pacReceiveAsync(); //pacOnDataReceived will be called here when a packet is integrate
+				cli.pacReceiveAsync(); 
+				//pacOnDataReceived will be called when a packet is integrate
 				Scanner scanner = new Scanner(System.in);
 				while(true){ 
 					String s=scanner.next();
