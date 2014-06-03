@@ -4,8 +4,7 @@
 """
 Pacswitch Server. June 2014 (C) Alex
 A generic data switch server using keep-alive connection,
-gets over NAT and connects various kinds of clients, only
-requiring an account to access. 
+gets over NAT and connects various kinds of clients. 
 
 Features:
 - Processing bandwidth about 30MB/s [lo interface speed test]
@@ -14,6 +13,14 @@ a client with C language.
 - C/Java/Python API provided.
 - Multiple kinds of clients, multiple logins with same account.
 - Telnet administration.
+
+Configuration:
+You need to configure the following at first:
+- global var: LOGFILE_FULLPATH, ADMIN_KEY
+- lambda expression: getConnection
+
+Find their definations in this file. 
+Little tip: Ctrl+F and type in `your`
 
 Dependencies:
 - Mysql connector
@@ -40,12 +47,13 @@ PACKAGE_END    =  "\x17CESTFINI\x04"
 # options
 ENABLE_LOGFILE = True
 ENABLE_TERMINAL_EVENT_FEED = True
-LOGFILE_FULLPATH = '/home/alex/log/pacswitch'
+LOGFILE_FULLPATH = 'your file path for logfile'
+ADMIN_KEY = 'your admin password to server via telnet'
 
 getConnection=lambda:mysql.connector.connect(
-	host='222.69.93.107',
-	user='iadmin', 
-	password='#021317',
+	host='your host ip addr',
+	user='your db username', 
+	password='your db password',
 	database='pacswitch'
 )
 
@@ -207,6 +215,9 @@ class PacServer(protocol.Protocol,object):
 			# This is only 4.5s/GB slower than the equivalent C program, thus no boost needed
 			iI = self.recvBuffer.find(PACKAGE_START)
 			iII = self.recvBuffer.find(PACKAGE_END)
+			if iII<iI: # Is this some DoS attack? PACKAGE_END is not allowed to appear in user data.
+				self.recvBuffer = self.recvBuffer[iII+len(PACKAGE_END):]
+				continue
 			fdata = self.recvBuffer[iI+len(PACKAGE_START):iII]
 			self.recvBuffer = self.recvBuffer[iII+len(PACKAGE_END):]
 			if fdata.startswith('\x02(TXTPAC)\n'): 
@@ -223,7 +234,7 @@ class PacServer(protocol.Protocol,object):
 						debug(lambda:'Malformed request: {0}'.format(li))
 						time.sleep(0.8)	# Control pace of potential attack	
 			elif self.auth:
-				# A data transmittion
+				# Packets switching
 				iI = fdata.find('\n')
 				name=fdata[:iI] 
 				recv_streams=streams[self.getStreamName(name)] # Figure out receiver client
@@ -264,7 +275,7 @@ class PacAdmin(LineOnlyReceiver):
 
 	def user(self,args):
 		"""Authentication"""
-		if len(args)==1 and args[0]=='alex0764': self.auth=True
+		if len(args)==1 and args[0]==ADMIN_KEY: self.auth=True
 
 	def exit(self,args):
 		self.transport.loseConnection()

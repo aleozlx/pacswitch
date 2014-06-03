@@ -7,12 +7,13 @@ class Mybuffer{
 	public static final int SZ_BUFFER=32768;
 	public byte[] buffer=new byte[SZ_BUFFER];
 	public int size=0;
-	protected int find(byte[] s2){
-		for(int i=0;i<this.size;i++)
+	protected int find(byte[] s2,int start){
+		for(int i=start;i<this.size;i++)
 			for(int j=0;j<s2.length&&i+j<this.size&&this.buffer[i+j]==s2[j];j++)
 				if(j==s2.length-1)return i;
 		return -1;
 	}	
+	protected int find(byte[] s2){ return find(s2,0); }	
 }
 
 public abstract class PacswitchClient {
@@ -21,6 +22,7 @@ public abstract class PacswitchClient {
 	public static final byte[] PACKAGE_TEXT={2,40,84,88,84,80,65,67,41,10};
 	public static final byte[] SPACE={32};
 	public static final byte[] NEWLINE={10};
+	public static final byte[] SENDER_SEP={62,32};
 	protected static final String ASCII="ascii";
 	protected Mybuffer mybuffer=new Mybuffer();
 	public Socket socket;
@@ -76,20 +78,19 @@ public abstract class PacswitchClient {
 		catch(IOException e){ e.printStackTrace(); }
 	}
 
-	public abstract void pacOnDataReceived(byte[] buffer);
+	public abstract void pacOnDataReceived(String sender,byte[] buffer);
 
 	public void pacLoop() throws IOException{
 		InputStream is=socket.getInputStream();
 		byte[] _mybuffer=new byte[2048]; int sz_mybuffer;
 		do{
-			int iI,iII;
+			int iI,iII,iIII;
 			while(mybuffer.size!=0&&(iI=mybuffer.find(PACKAGE_START))!=-1&&(iII=mybuffer.find(PACKAGE_END))!=-1){
-				//System.out.print('>');System.out.println(iI);
-				//System.out.print('>');System.out.println(iII);
-				byte[] data=new byte[iII-(iI+PACKAGE_START.length)];
-				//System.out.print('>');System.out.println(data.length);
-				System.arraycopy(mybuffer.buffer,iI+PACKAGE_START.length,data,0,data.length);
-				this.pacOnDataReceived(data); 
+				iIII=mybuffer.find(SENDER_SEP,iI+PACKAGE_START.length);
+				String sender=new String(mybuffer.buffer,iI+PACKAGE_START.length,iIII-(iI+PACKAGE_START.length));
+				byte[] data=new byte[iII-(iIII+SENDER_SEP.length)];
+				System.arraycopy(mybuffer.buffer,iIII+SENDER_SEP.length,data,0,data.length);
+				this.pacOnDataReceived(sender,data); 
 				iII+=PACKAGE_END.length;
 				System.arraycopy(mybuffer.buffer,iII,mybuffer.buffer,0,mybuffer.size-=iII);
 			}

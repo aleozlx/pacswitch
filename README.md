@@ -98,8 +98,12 @@ Documentation will come soon.
 			//Bind a handler to process data
 			final PacswitchClient cli=new PacswitchClient(){
 				@Override
-				public void pacOnDataReceived(byte[] buffer){ 
-					try{ System.out.println(new String(buffer,ENC)); }
+				public void pacOnDataReceived(String sender,byte[] buffer){ 
+					try{ 
+						System.out.print(sender);
+						System.out.print(": ");
+						System.out.println(new String(buffer,ENC)); 
+					}
 					catch(UnsupportedEncodingException e){ e.printStackTrace(); }
 				}
 			};

@@ -16,10 +16,10 @@ static void OnDataReceived(char *buffer,ssize_t length){
 }
 
 void mybuttonpacInit(){
-	strcpy(user,"alex");
-	strcpy(receiver,"alex");
+	strcpy(user,"test");
+	strcpy(receiver,"test");
 	password=(char*)malloc(80);
-	strcpy(password,"#021317");
+	strcpy(password,"1234");
 	if(pacInit(user,password,receiver,"222.69.93.107","mybutton")<0){
 		printf("Error.\n");
 	}
