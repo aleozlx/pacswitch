@@ -114,7 +114,7 @@ Documentation will come soon.
 			}
 
 			try{
-				//The same as pacLoop(), but in asyncronous way.
+				//The same as pacLoop(), but in asynchronous way.
 				cli.pacReceiveAsync(); //pacOnDataReceived will be called here when a packet is integrate
 				Scanner scanner = new Scanner(System.in);
 				while(true){ 

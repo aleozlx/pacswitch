@@ -16,6 +16,12 @@ class Mybuffer{
 	protected int find(byte[] s2){ return find(s2,0); }	
 }
 
+/**
+ * Pacswitch client
+ * @author Alex
+ * @version 1.0.0
+ * @since June 3, 2014
+ */
 public abstract class PacswitchClient {
 	public static final byte[] PACKAGE_START={5,65,76,88,80,65,67,83,86,82};
 	public static final byte[] PACKAGE_END={23,67,69,83,84,70,73,78,73,4};
@@ -27,6 +33,14 @@ public abstract class PacswitchClient {
 	protected Mybuffer mybuffer=new Mybuffer();
 	public Socket socket;
 
+	/**
+	 * Initiate a connection.
+	 * @param user User account
+	 * @param password Password
+	 * @param host Host IP Address
+	 * @param clienttype A unique string that distinguishes different kind of clients
+	 * @return Whether a connection is sucessfully made.
+	 */
 	public boolean pacInit(String user,String password,String host,String clienttype){
 		try{
 			socket=new Socket(host,3512);
@@ -49,11 +63,19 @@ public abstract class PacswitchClient {
 		return true;
 	}
 
+	/**
+	 * Close a connection.
+	 */
 	public void pacClose(){
 		try{ socket.close(); }
 		catch(IOException e){ e.printStackTrace(); }
 	}
 
+	/**
+	 * Send header of a packet.
+	 * @param recv Receiver account
+	 * @throws IOException
+	 */
 	public void pacStart(String recv) throws IOException {
 		OutputStream os=socket.getOutputStream();
 		os.write(PACKAGE_START);
@@ -61,11 +83,20 @@ public abstract class PacswitchClient {
 		os.write(NEWLINE);
 	}
 
+	/**
+	 * Send footer of a packet.
+	 * @throws IOException
+	 */
 	public void pacEnd() throws IOException {
 		OutputStream os=socket.getOutputStream();
 		os.write(PACKAGE_END);
 	}
 
+	/**
+	 * Send user data, which will be automatically wrapped in a packet.
+	 * @param buffer User data
+	 * @param recv Receiver account
+	 */
 	public void pacSendData(byte[] buffer,String recv) {
 		try {
 			OutputStream os=socket.getOutputStream();
@@ -78,8 +109,17 @@ public abstract class PacswitchClient {
 		catch(IOException e){ e.printStackTrace(); }
 	}
 
+	/**
+	 * Implement this to handle data received.
+	 * @param sender Sender account
+	 * @param buffer User data
+	 */
 	public abstract void pacOnDataReceived(String sender,byte[] buffer);
 
+	/**
+	 * Start an event loop for response data.
+	 * @throws IOException
+	 */
 	public void pacLoop() throws IOException{
 		InputStream is=socket.getInputStream();
 		byte[] _mybuffer=new byte[2048]; int sz_mybuffer;
@@ -106,6 +146,9 @@ public abstract class PacswitchClient {
 		} while(true);
 	}
 
+	/**
+	 * Start an event loop for response data asynchronously.
+	 */
 	public void pacReceiveAsync(){
 		new Thread(){
 			@Override
