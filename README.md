@@ -34,7 +34,7 @@ client with our API.
 - Initiate a connection.
 - Bind pacOnDataReceived method.
 - Start an event loop.
-- If you are not familiar with stuff, see example/Pactalk.java
+- If you are not familiar with stuff, see Example section and example/
 for example.
 
 ## For C
@@ -42,6 +42,8 @@ API
 
 	bin/libpacswitchcli.a
 	src/client api/pacswitchcli.h
+
+Steps
 
 1. Call "pacInit" to initiate a connection.
 2. Call "pacOnDataReceived" to bind a handler.
@@ -56,6 +58,8 @@ API
 
 	src/client api/PacswitchClient.java
 
+Steps
+
 1. Subclass "PacswitchClient" and implement "pacOnDataReceived" to handle response data.
 2. Call "pacInit" to initiate a connection.
 3. Call "pacReceiveAsync" to start an event loop.
@@ -64,6 +68,8 @@ API
 
 # Protocol
 Documentation will come soon.
+
+# Example
 
 ## C Example (Chatting client)
 
