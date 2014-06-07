@@ -1,3 +1,4 @@
+// Fork me on GitHub! https://github.com/aleozlx/pacswitch
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

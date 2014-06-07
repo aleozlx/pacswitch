@@ -6,21 +6,10 @@ Pacswitch Server. June 2014 (C) Alex
 A generic data switch server using keep-alive connection,
 gets over NAT and connects various kinds of clients. 
 
-Features:
-- Processing bandwidth about 30MB/s [lo interface speed test]
-- Simple protocol that only takes about 50 lines to implement
-a client with C language.
-- C/Java/Python API provided.
-- Multiple kinds of clients, multiple logins with same account.
-- Telnet administration.
+Fork me on GitHub! https://github.com/aleozlx/pacswitch
 
 Configuration:
-You need to configure the following at first:
-- global var: LOGFILE_FULLPATH, ADMIN_KEY
-- lambda expression: getConnection
-
-Find their definations in this file. 
-Little tip: Ctrl+F and type in `your`
+See options section.
 
 Dependencies:
 - Mysql connector
@@ -28,7 +17,7 @@ Dependencies:
 """
 
 # standard library
-import re,types,time
+import re,types,time,functools
 from time import time as timemark
 
 # mysql
@@ -49,13 +38,7 @@ ENABLE_LOGFILE = True
 ENABLE_TERMINAL_EVENT_FEED = True
 LOGFILE_FULLPATH = 'your file path for logfile'
 ADMIN_KEY = 'your admin password to server via telnet'
-
-getConnection=lambda:mysql.connector.connect(
-	host='your host ip addr',
-	user='your db username', 
-	password='your db password',
-	database='pacswitch'
-)
+getConnection=lambda:mysql.connector.connect(host='your host ip addr',user='your db username', password='your db password',database='pacswitch')
 
 def debug(msg,system='pacswitch'): 
 	"""Logging and debugging messages come here. 
@@ -113,9 +96,17 @@ def ezdml(stmt,dat):
 class PacswitchDB(object): pass
 class UserDB(PacswitchDB):
 	@staticmethod
-	def checkauth(userid,password): return ezqueryone("""SELECT userid,pointer FROM `user` WHERE userid=%s AND password=%s""",(userid,password))
+	def checkauth(userid,password): return ezqueryone("SELECT userid,pointer FROM `user` WHERE userid=%s AND password=%s",(userid,password))
 	@staticmethod
-	def getpointer(userid): return ezqueryone("""SELECT userid,pointer FROM `user` WHERE userid=%s""",(userid,))
+	def getpointer(userid): return ezqueryone("SELECT userid,pointer FROM `user` WHERE userid=%s",(userid,))
+	@staticmethod
+	def setpointer(userid,pointer): return ezdml("UPDATE `user` SET pointer=%s WHERE userid=%s",(pointer,userid))
+	@staticmethod
+	def adduser(userid,password): return ezdml("INSERT INTO `user` VALUES(%s,%s,'')",(userid,password))
+	@staticmethod
+	def setpassword(userid,oldpasswd,newpasswd): return ezdml("UPDATE `user` SET password=%s WHERE userid=%s AND password=%s",(newpasswd,userid,oldpasswd))
+	@staticmethod
+	def getall(): return ezquery("SELECT * FROM `user`",None)
 
 class StreamTracker(object):
 	"""Keep track of every client streams as well as their clienttype.
@@ -151,6 +142,12 @@ class StreamTracker(object):
 		return sum(len(self.streams[sn]) for sn in self.streams)
 
 streams=StreamTracker()
+
+def authenticated(method):
+	@functools.wraps(method)
+	def wrapper(self, arg):
+		if self.auth: return method(self, arg)
+	return wrapper
 
 class PacServer(protocol.Protocol,object):
 	"""Pacswitch Server implementation"""
@@ -188,19 +185,54 @@ class PacServer(protocol.Protocol,object):
 		""""AUTH" command: User Authentication"""
 		ss=line.split('\x20')
 		userid,passwd,self.clienttype=ss[0],ss[1],(ss[2] if len(ss)>=3 else '')
-		if not UserDB.checkauth(userid,passwd): 
-			debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
-			self.transport.write(''.join([PACKAGE_START,'pacswitch> Login authentication failed',PACKAGE_END]))
-		else:
+		q=UserDB.checkauth(userid,passwd)
+		if q: 
 			self.name=userid
 			self.auth=True
 			streams[self.streamName]=self.transport
 			debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
-			self.transport.write(''.join([PACKAGE_START,'pacswitch> Authenticated',PACKAGE_END]))
+		else:
+			debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
+		self.easyResponse(q)
 
 	def MASS(self, line):
-		""""MASS" command: Incidates a massive data transmissioin"""
+		""""MASS" command: Declare a massive data transmissioin"""
 		self.massive=True
+
+	@authenticated
+	def POINTER(self, line):
+		ss=line.split('\x20')
+		if len(ss)==0:
+			q=UserDB.getpointer(self.name)
+			if q: 
+				userid,pointer=q
+				self.response(pointer)
+		else:
+			pointer=ss[0]
+			UserDB.setpointer(self.name,pointer)
+
+	def REGISTER(self, line):
+		ss=line.split('\x20')
+		if len(ss)==2:
+			userid,password=ss[0],ss[1]
+			if userid!='pacswitch': 
+				self.easyResponse(UserDB.adduser(userid,password))
+
+	@authenticated
+	def PASSWD(self, line):
+		ss=line.split('\x20')
+		if len(ss)==2:
+			oldpasswd,newpasswd=ss[0],ss[1]
+			self.easyResponse(UserDB.setpassword(self.name,oldpasswd,newpasswd))
+
+	def TEST(self, line):
+		self.easyResponse(True)
+
+	def response(self, msg):
+		self.transport.write(''.join([PACKAGE_START,'pacswitch> ',msg,PACKAGE_END]))
+
+	def easyResponse(self, q):
+		self.response('OK' if q else 'Failed')
 
 	pRule=re.compile(r'^([A-Z]+)(\s+(.*)|)') # Command gramma
 	def dataReceived(self, data):
@@ -226,10 +258,9 @@ class PacServer(protocol.Protocol,object):
 					match=PacServer.pRule.match(li) # Make sure of safe interpretion
 					try:
 						methodname=match.expand(r'\1')
-						if self.auth or methodname=='AUTH':
-							foo=getattr(self, methodname, None)
-							if foo and type(foo) is types.MethodType: foo(match.expand(r'\2').strip())
-							else: raise Exception()
+						foo=getattr(self, methodname, None)
+						if foo and type(foo) is types.MethodType: foo(match.expand(r'\2').strip())
+						else: raise Exception()
 					except Exception, e: 
 						debug(lambda:'Malformed request: {0}'.format(li))
 						time.sleep(0.8)	# Control pace of potential attack	
@@ -262,32 +293,55 @@ class PacAdmin(LineOnlyReceiver):
 	def connectionLost(self, reason):
 		terminals.remove(self)
 
+	supported=['user','stream','exit'] # All commands supported
 	pRule=re.compile(r'^(\w+)(\s+(.*)|)') # Command gramma
 	def lineReceived(self, line):
 		match=PacAdmin.pRule.match(line)
 		if match:
 			methodname=match.expand(r'\1')
-			if methodname not in ['user','stream','exit']: return # Make sure of safe interpretion
+			if methodname not in PacAdmin.supported: return # Make sure of safe interpretion
 			args=[s.strip() for s in match.expand(r'\2').strip().split('\x20') if s]
-			if self.auth or methodname=='user' or methodname=='exit':
-				foo=getattr(self, methodname, None)
-				if foo and type(foo) is types.MethodType: foo(args)
+			foo=getattr(self, methodname, None)
+			if foo and type(foo) is types.MethodType: foo(args)
 
 	def user(self,args):
-		"""Authentication"""
-		if len(args)==1 and args[0]==ADMIN_KEY: self.auth=True
+		if self.auth:
+			if len(args)==0:
+				for userid,password,pointer in UserDB.getall():
+					self.sendLine('{0}  {1}'.format(userid,pointer))
+			elif len(args)==2 and args[0]=='lookup':
+				userid=args[1]
+				q=UserDB.getpointer(userid)
+				if q: self.sendLine('{0}  {1}'.format(*q))
+				else: self.sendLine('NOT FOUND')
+			elif len(args)==3 and args[0]=='add':
+				userid,password=args[1],args[2]
+				UserDB.adduser(userid,password)
+		elif len(args)==1 and args[0]==ADMIN_KEY: self.auth=True
 
 	def exit(self,args):
 		self.transport.loseConnection()
 
+	@authenticated
 	def stream(self,args):
 		"""Inspection of stream tracker"""
-		if len(args)==1:
-			if args[0]=='show':
+		if len(args)==1 and args[0]=='show':
+			smap=streams.asDict()
+			for sn in smap: 
+				self.sendLine('{0} -> {1}'.format(sn,' '.join('#'+str(s.fileno()) for s in smap[sn])))
+			self.sendLine('{0} stream(s) active.'.format(streams.totalStreams()))
+		elif len(args)==2 and args[0]=='kill':
+			try:
+				fileno=int(args[1])
 				smap=streams.asDict()
 				for sn in smap: 
-					self.sendLine('{0} -> {1}'.format(sn,' '.join('#'+str(s.fileno()) for s in smap[sn])))
-				self.sendLine('{0} stream(s) active.'.format(streams.totalStreams()))
+					for s in smap[sn]:
+						if s.fileno()==fileno:
+							s.loseConnection()
+							smap[sn].remove(s) 
+							self.sendLine('Done')
+							return
+			except: self.sendLine('Failed')
 
 class PacAdminFactory(protocol.Factory):
 	def buildProtocol(self, addr): return PacAdmin()

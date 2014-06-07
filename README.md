@@ -6,6 +6,8 @@ A generic data switch server using keep-alive connection,
 gets over NAT and connects various kinds of clients, only
 requiring your account to access. 
 
+Fork me on GitHub! https://github.com/aleozlx/pacswitch
+
 # Features:
 - Processing bandwidth about 30MB/s [lo interface speed test]
 - Simple protocol that only takes about 50 lines to implement a client with C language.
@@ -167,20 +169,20 @@ Documentation will come soon.
 				System.out.println("Error: network error"); return; 
 			}
 
+			cli.start(); //Start event loop
+
+			Scanner scanner = new Scanner(System.in);
 			try{
-				//The same as pacLoop(), but in asynchronous way.
-				cli.pacReceiveAsync(); 
-				//pacOnDataReceived will be called when a packet is integrate
-				Scanner scanner = new Scanner(System.in);
 				while(true){ 
-					String s=scanner.next();
+					String s=scanner.nextLine();
 					//Send data
 					try{ cli.pacSendData(s.getBytes(ENC),recv); }
-					catch(UnsupportedEncodingException e){ e.printStackTrace(); }
+					catch(UnsupportedEncodingException e){ }
 				}
 			}
+			catch(NoSuchElementException eeof){ /* Raised because of EOF */ }
 			//Close connection
-			finally{ cli.pacClose(); }
+			finally{ cli.close(); }
 		}
 	}
 

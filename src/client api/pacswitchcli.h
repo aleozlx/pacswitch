@@ -1,3 +1,4 @@
+// Fork me on GitHub! https://github.com/aleozlx/pacswitch
 #ifndef __PACSWITCHCLI_H_
 #define __PACSWITCHCLI_H_
 #define SZ_PACKAGE_START 10

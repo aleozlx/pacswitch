@@ -17,29 +17,31 @@ public class Pactalk{
 
 		final PacswitchClient cli=new PacswitchClient(){
 			@Override
-			public void pacOnDataReceived(String sender,byte[] buffer){ 
+			public void onDataReceived(String sender,byte[] buffer){ 
 				try{ 
 					System.out.print(sender);
 					System.out.print(": ");
 					System.out.println(new String(buffer,ENC)); 
 				}
-				catch(UnsupportedEncodingException e){ e.printStackTrace(); }
+				catch(UnsupportedEncodingException e){ }
 			}
 		};
 
 		if(!cli.pacInit(user,password,"222.69.93.107","pactalk")){ 
 			System.out.println("Error: network error"); return; 
 		}
-
+		
+		cli.start();
+		
+		Scanner scanner = new Scanner(System.in);
 		try{
-			cli.pacReceiveAsync();
-			Scanner scanner = new Scanner(System.in);
 			while(true){ 
 				String s=scanner.nextLine();
 				try{ cli.pacSendData(s.getBytes(ENC),recv); }
-				catch(UnsupportedEncodingException e){ e.printStackTrace(); }
+				catch(UnsupportedEncodingException e){ }
 			}
 		}
-		finally{ cli.pacClose(); }
+		catch(NoSuchElementException eeof){ /* Raised because of EOF */ }
+		finally{ cli.close(); }
 	}
 }
