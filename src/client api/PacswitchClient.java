@@ -4,50 +4,138 @@ import java.io.*;
 import java.net.*;
 import java.lang.*;
 
+/**
+ * Data buffer for PacswitchClient
+ * @author Alex
+ */
 class Mybuffer{
+	/**
+	 * Buffer size
+	 */
 	public static final int SZ_BUFFER=32768;
+
+	/**
+	 * Data bufferred
+	 */
 	public byte[] buffer=new byte[SZ_BUFFER];
+
+	/**
+	 * Data size
+	 */
 	public int size=0;
+
+	/**
+	 * Find position of specific sequence.
+	 * @param s2 A sequence
+	 * @param start Position to get started
+	 * @return The position of specific sequence or -1 if not found.
+	 */
 	protected int find(byte[] s2,int start){
 		for(int i=start;i<this.size;i++)
 			for(int j=0;j<s2.length&&i+j<this.size&&this.buffer[i+j]==s2[j];j++)
 				if(j==s2.length-1)return i;
 		return -1;
-	}	
+	}
+
+	/**
+	 * Find position of specific sequence.
+	 * @param s2 A sequence
+	 * @return The position of specific sequence or -1 if not found.
+	 */
 	protected int find(byte[] s2){ return find(s2,0); }	
 }
 
 /**
  * Pacswitch client
  * @author Alex
- * @version 1.1.0
+ * @version 1.2.1
  * @since June 3, 2014
  */
 public abstract class PacswitchClient {
+	/**
+	 * Package start sequence
+	 */
 	public static final byte[] PACKAGE_START={5,65,76,88,80,65,67,83,86,82};
+
+	/**
+	 * Package end sequence
+	 */
 	public static final byte[] PACKAGE_END={23,67,69,83,84,70,73,78,73,4};
+
+	/**
+	 * Protocol method start sequence
+	 */
 	public static final byte[] PACKAGE_TEXT={2,40,84,88,84,80,65,67,41,10};
+
+	/**
+	 * Literal space
+	 */
 	public static final byte[] SPACE={32};
+
+	/**
+	 * Literal new line
+	 */
 	public static final byte[] NEWLINE={10};
+
+	/**
+	 * Sender separator
+	 */
 	public static final byte[] SENDER_SEP={62,32};
+
+	/**
+	 * Encoding
+	 */
 	protected static final String ASCII="ascii";
+
+	/**
+	 * Data buffer
+	 */
 	protected Mybuffer mybuffer=new Mybuffer();
+
+	/**
+	 * User ID
+	 */
 	protected String user;
+
+	/**
+	 * User password
+	 */
 	protected String password;
+
+	/**
+	 * Host IP address
+	 */
 	protected String host;
+
+	/**
+	 * Client type
+	 */
 	protected String clienttype;
+
+	/**
+	 * Enable auto-reconnection
+	 */
 	public boolean autoReconnect=true;
-	public Socket socket;
+
+	/**
+	 * Flag for the unique receive event loop
+	 */
+	private boolean loopStarted=false;
+
+	/**
+	 * Socket object
+	 */
+	Socket socket;
 
 	/**
 	 * Initiate a connection.
-	 * @param user User account
+	 * @param user User ID
 	 * @param password Password
 	 * @param host Host IP Address
 	 * @param clienttype A unique string that distinguishes different kind of clients
 	 * @return Whether a connection is sucessfully made.
 	 */
-	public boolean pacInit(String user,String password,String host,String clienttype){
+	public final boolean pacInit(String user,String password,String host,String clienttype){
 		try{
 			socket=new Socket(host,3512);
 			this.user=user;
@@ -60,7 +148,11 @@ public abstract class PacswitchClient {
 		return true;
 	}
 
-	protected void AUTH() throws IOException{
+	/**
+	 * protocol method `AUTH`
+	 * @throws IOException
+	 */
+	protected final synchronized void AUTH() throws IOException{
 		OutputStream os=socket.getOutputStream();
 		os.write(PACKAGE_START);
 		os.write(PACKAGE_TEXT);
@@ -74,6 +166,19 @@ public abstract class PacswitchClient {
 		os.write(PACKAGE_END);
 	}
 
+	/**
+	 * Wait for some milliseconds
+	 * @param ms A specific time
+	 */
+	protected static final void wait(int ms){
+		try{ Thread.sleep(ms); }
+		catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+	}
+
+	/**
+	 * Reconnect to server.
+	 * @return Whether a reconnection is successfully made after, if necessary, multiple retries.
+	 */
 	protected boolean reconnect(){
 		while(autoReconnect){
 			this.closeSocket();
@@ -82,10 +187,7 @@ public abstract class PacswitchClient {
 				AUTH();
 				return true;
 			}
-			catch(IOException e){
-				try{ Thread.sleep(800); }
-				catch(InterruptedException e2){ Thread.currentThread().interrupt(); }
-			}
+			catch(IOException e){ this.wait(800); }
 		}
 		return false;
 	} 
@@ -93,33 +195,34 @@ public abstract class PacswitchClient {
 	/**
 	 * Send user data, which will be automatically wrapped in a packet.
 	 * @param buffer User data
-	 * @param recv Receiver account
+	 * @param recv Receiver ID
+	 * @return Whether the packet is successfully sent after, if necessary, multiple retries.
 	 */
-	public boolean pacSendData(byte[] buffer,String recv) {
-		while(true){
+	public final boolean pacSendData(byte[] buffer,String recv) {
+		for(int tries=0;tries<3;tries++){
 			try{ 
-				OutputStream os=socket.getOutputStream(); 
-				os.write(PACKAGE_START);
-				os.write(recv.getBytes(ASCII));
-				os.write(NEWLINE);
-				os.write(buffer);
-				os.write(PACKAGE_END);
-				break;
+				synchronized(this){
+					OutputStream os=socket.getOutputStream(); 
+					os.write(PACKAGE_START);
+					os.write(recv.getBytes(ASCII));
+					os.write(NEWLINE);
+					os.write(buffer);
+					os.write(PACKAGE_END);
+				}
+				return true;
 			}
-			catch(IOException e){
-				try{ Thread.sleep(2000); }
-				catch(InterruptedException e2){ Thread.currentThread().interrupt(); }
-			}
+			catch(IOException e){ this.wait(2000); }
 		}
-		return true;
+		return false;
 	}
 
 	/**
-	 * Start an event loop for response data.
+	 * Start the event loop for response data.
 	 * @throws InterruptedException
 	 */
-	public void pacLoop() throws InterruptedException{
+	public final void pacLoop() throws InterruptedException{
 		byte[] _mybuffer=new byte[2048]; int sz_mybuffer,iI,iII,iIII;
+		this.loopStarted=true;
 		do{
 			while(mybuffer.size!=0&&(iI=mybuffer.find(PACKAGE_START))!=-1&&(iII=mybuffer.find(PACKAGE_END))!=-1){
 				iIII=mybuffer.find(SENDER_SEP,iI+PACKAGE_START.length);
@@ -155,28 +258,23 @@ public abstract class PacswitchClient {
 	 * Start an event loop asynchronously for response data.
 	 */
 	public void start(){
-		new Thread(){
-			@Override
-			public void run(){
-				try{ pacLoop(); }
-				catch(InterruptedException e){ this.interrupt(); }
-			}
-		}.start();
+		if(!this.loopStarted){
+			new Thread(){
+				@Override
+				public void run(){
+					try{ pacLoop(); }
+					catch(InterruptedException e){ this.interrupt(); }
+				}
+			}.start();
+		}
 	}
 
 	/**
 	 * Implement this to handle data received.
-	 * @param sender Sender account
+	 * @param sender Sender ID
 	 * @param buffer User data
 	 */
 	public abstract void onDataReceived(String sender,byte[] buffer);
-
-	// /**
-	//  * Override this to handle severe network error.
-	//  * This is only called when there is no way to continue.
-	//  * @param e IOException
-	//  */
-	// public void onNetworkError(IOException e){ }
 
 	/**
 	 * Override this to handle server response messages
@@ -185,15 +283,44 @@ public abstract class PacswitchClient {
 	public void onServerResponse(String msg){ }
 
 	/**
-	 * Close a connection permanently.
+	 * Close the connection permanently.
 	 */
 	public void close(){ 
 		this.autoReconnect=false;
 		this.closeSocket(); 
 	}
 
-	protected void closeSocket(){
+	/**
+	 * Close the socket.
+	 */
+	protected final void closeSocket(){
 		try{ if(socket!=null)socket.close(); }
 		catch(Exception e){ }
 	}
+
+	/**
+	 * Close the connection permanently.
+	 */
+	@Deprecated
+	public void pacClose(){ this.close(); }
+
+	/**
+	 * Get the file discriptor of the socket
+	 * @return The file discriptor of the socket
+	 */
+	@Deprecated
+	protected int pacSocketno(){ throw new Error("Not implemented"); }
+
+	/**
+	 * Send a package start sequence
+	 * @param recv Receiver ID
+	 */
+	@Deprecated
+	protected void pacStart(String recv){ throw new Error("Not implemented"); }
+
+	/**
+	 * Send a package end sequence
+	 */
+	@Deprecated
+	protected void pacEnd(){ throw new Error("Not implemented"); }
 }

@@ -1,0 +1,4 @@
+*.class
+pacswitch.sublime-project
+pacswitch.sublime-workspace
+src/pacswitch.conf.py

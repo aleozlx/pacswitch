@@ -17,7 +17,7 @@ Dependencies:
 """
 
 # standard library
-import re,types,time,functools
+import re,types,time,functools,random
 from time import time as timemark
 
 # mysql
@@ -159,6 +159,7 @@ class PacServer(protocol.Protocol,object):
 		self.clienttype=''
 		self.streamName=''
 		self.auth=False
+		self.binary=False
 		self.totalsize=0
 		self.massive=False
 
@@ -193,7 +194,7 @@ class PacServer(protocol.Protocol,object):
 			debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
 		else:
 			debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
-		self.easyResponse(q)
+		self.easyResponse('LOGIN',q)
 
 	def MASS(self, line):
 		""""MASS" command: Declare a massive data transmissioin"""
@@ -206,7 +207,7 @@ class PacServer(protocol.Protocol,object):
 			q=UserDB.getpointer(self.name)
 			if q: 
 				userid,pointer=q
-				self.response(pointer)
+				self.response('POINTER',pointer)
 		else:
 			pointer=ss[0]
 			UserDB.setpointer(self.name,pointer)
@@ -216,23 +217,39 @@ class PacServer(protocol.Protocol,object):
 		if len(ss)==2:
 			userid,password=ss[0],ss[1]
 			if userid!='pacswitch': 
-				self.easyResponse(UserDB.adduser(userid,password))
+				self.easyResponse('REGISTER',UserDB.adduser(userid,password))
 
 	@authenticated
 	def PASSWD(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			oldpasswd,newpasswd=ss[0],ss[1]
-			self.easyResponse(UserDB.setpassword(self.name,oldpasswd,newpasswd))
+			self.easyResponse('PASSWD',UserDB.setpassword(self.name,oldpasswd,newpasswd))
 
 	def TEST(self, line):
-		self.easyResponse(True)
+		self.easyResponse('TEST',True)
 
-	def response(self, msg):
-		self.transport.write(''.join([PACKAGE_START,'pacswitch> ',msg,PACKAGE_END]))
+	@authenticated
+	def STREAM(self, line):
+		ss=line.split('\x20')
+		if len(ss)==2:
+			dstid,device=ss[0],ss[1]
+			# not implemented
+			assert False
 
-	def easyResponse(self, q):
-		self.response('OK' if q else 'Failed')
+	def BIN(self, line):
+		ss=line.split('\x20')
+		if len(ss)==2:
+			srcid,dstid=ss[0],ss[1]
+			if srcid in streams and streams[srcid]==None and dstid in streams:
+				self.massive,self.binary=True,True
+				streams[srcid]=self.transport
+
+	def response(self, title, msg):
+		self.transport.write(''.join([PACKAGE_START,'pacswitch> ',title,': ',msg,PACKAGE_END]))
+
+	def easyResponse(self, title, q):
+		self.response(title,'OK' if q else 'Failed')
 
 	pRule=re.compile(r'^([A-Z]+)(\s+(.*)|)') # Command gramma
 	def dataReceived(self, data):
