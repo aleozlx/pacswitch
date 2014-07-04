@@ -184,17 +184,18 @@ class PacServer(protocol.Protocol,object):
 
 	def AUTH(self, line):
 		""""AUTH" command: User Authentication"""
-		ss=line.split('\x20')
-		userid,passwd,self.clienttype=ss[0],ss[1],(ss[2] if len(ss)>=3 else '')
-		q=UserDB.checkauth(userid,passwd)
-		if q: 
-			self.name=userid
-			self.auth=True
-			streams[self.streamName]=self.transport
-			debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
-		else:
-			debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
-		self.easyResponse('LOGIN',q)
+		if self.auth==False:
+			ss=line.split('\x20')
+			userid,passwd,self.clienttype=ss[0],ss[1],(ss[2] if len(ss)>=3 else '')
+			q=UserDB.checkauth(userid,passwd)
+			if q: 
+				self.name=userid
+				self.auth=True
+				streams[self.streamName]=self.transport
+				debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
+			else:
+				debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
+			self.easyResponse('LOGIN',q)
 
 	def MASS(self, line):
 		""""MASS" command: Declare a massive data transmissioin"""
@@ -231,11 +232,13 @@ class PacServer(protocol.Protocol,object):
 
 	@authenticated
 	def STREAM(self, line):
-		ss=line.split('\x20')
-		if len(ss)==2:
-			dstid,device=ss[0],ss[1]
-			# not implemented
-			assert False
+		while 1:
+			srcid,dstid=tuple(''.join(random.choice('qwertyuiopasdfghjklzxcvbnmzy') for i in xrange(20)) for k in xrange(2))
+			if srcid not in streams and dstid not in streams: 
+				streams[srcid],streams[dstid]=None,None
+				# TODO expire it after 10s if unused
+				break
+		self.response('STREAM','\x20'.join((srcid,dstid)))
 
 	def BIN(self, line):
 		ss=line.split('\x20')

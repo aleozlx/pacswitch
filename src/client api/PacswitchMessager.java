@@ -5,11 +5,6 @@ import java.util.*;
 import java.io.*;
 import java.net.*;
 
-class FutureObject<T>{
-	public T value=null;
-	public boolean isAvailable=false;
-}
-
 /**
  * PacswitchMessager
  * @author Alex
@@ -21,25 +16,19 @@ public abstract class PacswitchMessager extends PacswitchClient {
 	 */
 	public static final String ENC="utf-8";
 
+	protected static final String SVRRES_STREAM="SVRRES_STREAM";
+
+	protected static final String STREAM_DENIED="";
+
 	/**
 	 * Request ID length
 	 */
 	private static final int RIDLEN=20;
 
 	/**
-	 * Request flag
-	 */
-	protected static final byte[] REQFLAG={RIDLEN};
-
-	/**
-	 * Response flag
-	 */
-	protected static final byte[] RESFLAG={0};
-
-	/**
 	 * Authentication state
 	 */
-	int _isAuthenticated=666;
+	FutureObject<Integer> _isAuthenticated=new FutureObject<Integer>(Synchronizer.AUTH_DEFAULT);
 
 	/**
 	 * Request/response mapping
@@ -49,12 +38,14 @@ public abstract class PacswitchMessager extends PacswitchClient {
 	/**
 	 * Incoming connection mapping
 	 */
-	protected Map<String,FutureObject<Socket>> sockmap=new HashMap<String,FutureObject<Socket>>();
+	protected Map<String,FutureObject<PacswitchSocket>> sockmap=new HashMap<String,FutureObject<PacswitchSocket>>();
 
 	/**
 	 * Request ID range
 	 */
 	protected static final char[] ridRange="0123456789abcdefghjkmnpqrstuvwxyz".toCharArray();
+
+	protected String device;
 
 	/**
 	 * Request ID length
@@ -64,20 +55,19 @@ public abstract class PacswitchMessager extends PacswitchClient {
 	 * @param clienttype Client type
 	 * @return Whether initialized successfully.
 	 */
-	public boolean connect(String userid,String password,String host,String clienttype){
+	public boolean connect(String userid,String password,String device,String host,String clienttype){
+		this.device=device;
 		if(!this.pacInit(userid,password,host,clienttype))return false;
-		else{ this.start(); this._isAuthenticated=0; return true; }
+		else{ this.start(); this._isAuthenticated.value=Synchronizer.NOT_AVAILABLE; return true; }
 	}
 
 	/**
 	 * Authentication state.
 	 * @return msg Authentication state
 	 */
-	public boolean isAuthenticated(){ 
-		if(this._isAuthenticated==666)return false;
-		while(this._isAuthenticated==0)this.wait(50);
-		return this._isAuthenticated==1; 
-	}
+	public final boolean isAuthenticated(){ return Synchronizer.isAuthenticated(this._isAuthenticated); }
+
+	public final String getDeviceName(){ return this.device; }
 
 	/**
 	 * Handle a response or a request.
@@ -89,21 +79,59 @@ public abstract class PacswitchMessager extends PacswitchClient {
 		String message;
 		try{ message=new String(buffer,RIDLEN+1,buffer.length-RIDLEN-1,ENC); }
 		catch(UnsupportedEncodingException e){ return; }
-		if(buffer[0]==REQFLAG[0]){ // Request received
+		switch(MessageType.fromByte(buffer[0])){
+		case REQUEST:
 			String response=this.handleMessage(sender,message);
-			try{ this.sendDataFields(sender,RESFLAG,Arrays.copyOfRange(buffer,1,RIDLEN+1),response.getBytes(ENC)); }
+			try{ 
+				this.sendDataFields(sender,
+					MessageType.RESPONSE.getData(),
+					Arrays.copyOfRange(buffer,1,RIDLEN+1),
+					response.getBytes(ENC)); 
+			}
 			catch(UnsupportedEncodingException e){ }
-		}
-		else if(buffer[0]==0){ // Response received
+			break;
+		case RESPONSE:
 			try{
 				String requestID=new String(buffer,1,RIDLEN,ASCII);
 				FutureObject<String> mr=msgmap.get(requestID);
-				if(mr!=null){
-					mr.value=message;
-					mr.isAvailable=true;
-				}
+				if(mr!=null)mr.set(message);
 			}
 			catch(UnsupportedEncodingException e){ }
+			break;
+		case STREAMREQ:
+			if(message.equals(this.getDeviceName())){
+				try{ 
+					if(!msgmap.containsKey(SVRRES_STREAM))msgmap.put(SVRRES_STREAM,new FutureObject<String>());
+					FutureObject<String> svrres=msgmap.get(SVRRES_STREAM);
+					STREAM(); 
+					svrres.until(10,60);
+					if(svrres.isAvailable()){
+						String[] invitecode=svrres.get().split(" ");
+						
+									/*
+			create socket and initialize it
+			initiate new thread and call acceptSocket
+			put message to response the invite code to other side
+			*/
+					}
+				}
+				catch(IOException e){ }
+			}
+			else{
+				try{ 
+					this.sendDataFields(sender,
+						MessageType.STREAMRES.getData(),
+						Arrays.copyOfRange(buffer,1,RIDLEN+1),
+						STREAM_DENIED.getBytes(ENC)); 
+				}
+				catch(UnsupportedEncodingException e){ }
+			}
+			break;
+		case STREAMRES:
+			
+			//create socket and initialize it
+			break;
+
 		}
 	}
 
@@ -112,22 +140,55 @@ public abstract class PacswitchMessager extends PacswitchClient {
 	 * @param msg Server response message
 	 */
 	@Override
-	public final void onServerResponse(String msg){
-		String[] title_body=msg.split(": ");
-		if(title_body.length==2){
-			String title=title_body[0],body=title_body[1];
-			if(title.equals("LOGIN")){
-				if(body.equals("OK"))this._isAuthenticated=1;
-				else this._isAuthenticated=-1;
-			}
-			else if(title.equals("INVITE")){
-				/*
-				create socket and initialize it
-				initiate new thread and call acceptSocket
-				put message to response the invite code to other side
-				*/
-			}
+	public final void onServerResponse(String title, String msg){
+		if(title.equals("LOGIN")){
+			if(msg.equals("OK"))this._isAuthenticated.set(Synchronizer.OK);
+			else this._isAuthenticated.set(Synchronizer.FAILED);
 		}
+		else if(title.equals("STREAM")){
+			FutureObject<String> svrres=msgmap.get(SVRRES_STREAM);
+			if(svrres!=null)svrres.set(msg);
+		}
+	}
+
+	/**
+	 * Send a message.
+	 * @param to Receiver ID
+	 * @param message Message content
+	 * @return Response from other side
+	 * @throw PacswitchException
+	 */
+	public final String send(String to, String message) throws PacswitchException{
+		FutureObject<String> mr=null;
+		PacswitchException e;
+		try{ 
+			mr=this._send(MessageType.REQUEST,to,message); 
+			e=mr.getException();
+			if(e!=null)throw e;
+			return mr.get(Synchronizer.TIMEOUT_DEFALUT,new UnreachableException(to,"No response"));
+		}
+		finally{ if(mr!=null)this.msgmap.remove(mr.getTag()); }
+	}
+
+	protected final FutureObject<String> _send(MessageType msgtype,String to, String message){
+		FutureObject<String> mr=new FutureObject<String>();
+		if(this.isAuthenticated()){
+			Random r=new Random();
+			char[] ridbuffer=new char[RIDLEN];
+			for(int i=0;i<RIDLEN;i++)ridbuffer[i]=ridRange[r.nextInt(ridRange.length)];
+			String requestID=new String(ridbuffer);
+			mr.tag=requestID;
+			this.msgmap.put(requestID,mr);
+			try{
+				if(this.sendDataFields(to,
+					msgtype.getData(),
+					requestID.getBytes(ASCII),
+					message.getBytes(ENC))) return mr;
+				else return mr.exceptionSugar(new UnreachableException(to,"Offline"));
+			}
+			catch(UnsupportedEncodingException e){ return mr.exceptionSugar(new PacswitchException("Unsupported encoding",e)); }
+		}
+		else return mr.exceptionSugar(new PacswitchException("Not authenticated"));
 	}
 
 	/**
@@ -142,50 +203,16 @@ public abstract class PacswitchMessager extends PacswitchClient {
 		return pacSendData(buffer.toByteArray(),to);
 	}
 
-	/**
-	 * Send a message.
-	 * @param to Receiver ID
-	 * @param message Message content
-	 * @return Response from other side
-	 * @throw PacswitchException
-	 */
-	public String sendMessage(String to, String message) throws PacswitchException{
-		if(this.isAuthenticated()){
-			Random r=new Random();
-			char[] ridbuffer=new char[RIDLEN];
-			for(int i=0;i<RIDLEN;i++)ridbuffer[i]=ridRange[r.nextInt(ridRange.length)];
-			String requestID=new String(ridbuffer);
-			FutureObject<String> mr=new FutureObject<String>();
-			this.msgmap.put(requestID,mr);
-			try{
-				if(this.sendDataFields(to,REQFLAG,requestID.getBytes(ASCII),message.getBytes(ENC))){
-					for(int tries=0;tries<65&&!mr.isAvailable;tries++)this.wait(30);
-					if(mr.isAvailable)return mr.value;
-					else throw new UnreachableException(to,"No response");
-				}
-				else throw new UnreachableException(to,"Offline");
-			}
-			catch(UnsupportedEncodingException e){ throw new PacswitchException("Unsupported encoding",e); }
-			finally{ this.msgmap.remove(requestID); }
-		}
-		else throw new PacswitchException("Not authenticated");
+	protected final FutureObject<PacswitchSocket> _punch(String to, String device){
+		FutureObject<PacswitchSocket> r=new FutureObject<PacswitchSocket>();
+		FutureObject<String> sres=this._send(MessageType.STREAMREQ,to,device);
+		PacswitchException e=sres.getException();
+		r.tag=sres.getTag();
+		if(e!=null)return r.exceptionSugar(e);
+		else{ sockmap.put(sres.getTag(),r); return r; }
 	}
 
-	public Socket createSocket(String to, String device){
-		/*
-		send special message for a new socket
-		wait for invite code
-		create socket and initialize it
-		return socket
-		*/
-		return null;
-	}
-
-	public void acceptSocket(String from, Socket s){
-		/*
-		[abstract method] called in a new thread
-		*/
-	}
+	public void acceptSocket(String from, PacswitchSocket s){ }
 
 	/**
 	 * Handle a message.

@@ -5,47 +5,6 @@ import java.net.*;
 import java.lang.*;
 
 /**
- * Data buffer for PacswitchClient
- * @author Alex
- */
-class Mybuffer{
-	/**
-	 * Buffer size
-	 */
-	public static final int SZ_BUFFER=32768;
-
-	/**
-	 * Data bufferred
-	 */
-	public byte[] buffer=new byte[SZ_BUFFER];
-
-	/**
-	 * Data size
-	 */
-	public int size=0;
-
-	/**
-	 * Find position of specific sequence.
-	 * @param s2 A sequence
-	 * @param start Position to get started
-	 * @return The position of specific sequence or -1 if not found.
-	 */
-	protected int find(byte[] s2,int start){
-		for(int i=start;i<this.size;i++)
-			for(int j=0;j<s2.length&&i+j<this.size&&this.buffer[i+j]==s2[j];j++)
-				if(j==s2.length-1)return i;
-		return -1;
-	}
-
-	/**
-	 * Find position of specific sequence.
-	 * @param s2 A sequence
-	 * @return The position of specific sequence or -1 if not found.
-	 */
-	protected int find(byte[] s2){ return find(s2,0); }	
-}
-
-/**
  * Pacswitch client
  * @author Alex
  * @version 1.2.1
@@ -86,6 +45,11 @@ public abstract class PacswitchClient {
 	 * Encoding
 	 */
 	protected static final String ASCII="ascii";
+
+	/**
+	 * Port
+	 */
+	protected int port=3512;
 
 	/**
 	 * Data buffer
@@ -137,7 +101,7 @@ public abstract class PacswitchClient {
 	 */
 	public final boolean pacInit(String user,String password,String host,String clienttype){
 		try{
-			socket=new Socket(host,3512);
+			socket=new Socket(host,port);
 			this.user=user;
 			this.password=password;
 			this.host=host;
@@ -167,12 +131,16 @@ public abstract class PacswitchClient {
 	}
 
 	/**
-	 * Wait for some milliseconds
-	 * @param ms A specific time
+	 * protocol method `STREAM`
+	 * @throws IOException
 	 */
-	protected static final void wait(int ms){
-		try{ Thread.sleep(ms); }
-		catch(InterruptedException e){ Thread.currentThread().interrupt(); }
+	protected final synchronized void STREAM() throws IOException{
+		OutputStream os=socket.getOutputStream();
+		os.write(PACKAGE_START);
+		os.write(PACKAGE_TEXT);
+		// STREAM
+		os.write("STREAM".getBytes(ASCII)); 
+		os.write(PACKAGE_END);
 	}
 
 	/**
@@ -183,11 +151,11 @@ public abstract class PacswitchClient {
 		while(autoReconnect){
 			this.closeSocket();
 			try{ 
-				socket=new Socket(host,3512);
+				socket=new Socket(host,port);
 				AUTH();
 				return true;
 			}
-			catch(IOException e){ this.wait(800); }
+			catch(IOException e){ Synchronizer.wait(800); }
 		}
 		return false;
 	} 
@@ -211,7 +179,7 @@ public abstract class PacswitchClient {
 				}
 				return true;
 			}
-			catch(IOException e){ this.wait(2000); }
+			catch(IOException e){ Synchronizer.wait(2000); }
 		}
 		return false;
 	}
@@ -230,7 +198,11 @@ public abstract class PacswitchClient {
 				byte[] data=new byte[iII-(iIII+SENDER_SEP.length)];
 				System.arraycopy(mybuffer.buffer,iIII+SENDER_SEP.length,data,0,data.length);
 				if(sender.equals("pacswitch")){
-					try{onServerResponse(new String(data,ASCII));}
+					try{ 
+						final String TSEP=": "; String msg=new String(data,ASCII);
+						int ii=msg.indexOf(TSEP);
+						onServerResponse(msg.substring(0,ii),msg.substring(ii+TSEP.length()));
+					}
 					catch(UnsupportedEncodingException ee){ }
 				}
 				else onDataReceived(sender,data); 
@@ -278,9 +250,10 @@ public abstract class PacswitchClient {
 
 	/**
 	 * Override this to handle server response messages
+	 * @param title Server response title
 	 * @param msg Server response message
 	 */
-	public void onServerResponse(String msg){ }
+	public void onServerResponse(String title, String msg){ }
 
 	/**
 	 * Close the connection permanently.
