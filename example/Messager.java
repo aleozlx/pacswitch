@@ -16,6 +16,7 @@ public class Messager extends PacswitchMessager {
 		return super.connect(userid,password,null,"222.69.93.107","messager1.0");
 	}
 
+	@Override
 	public String handleMessage(String from, String message){
 		System.out.println(String.format("%1$s: %2$s",from,message));
 		return "ACK";

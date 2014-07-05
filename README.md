@@ -39,7 +39,7 @@ client with our API.
 - If you are not familiar with stuff, see Example section and example/
 for example.
 
-## For C
+## C Language for instance
 API
 
 	bin/libpacswitchcli.a
@@ -55,23 +55,10 @@ Steps
 6. Call "pacClose" to socket.
 7. Compile with "gcc -O2 -Wall -Wno-unused-result -o yourclient yourclient.c libpacswitchcli.a"
 
-## For Java
-API
+# Documentation
+see doc/
 
-	src/client api/PacswitchClient.java
-
-Steps
-
-1. Subclass "PacswitchClient" and implement "pacOnDataReceived" to handle response data.
-2. Call "pacInit" to initiate a connection.
-3. Call "pacReceiveAsync" to start an event loop.
-4. Call "pacSendData" whenever you like to send data.
-5. Call "pacClose" to close connection.
-
-# Protocol
-Documentation will come soon.
-
-# Example
+# Example (from low level to high level)
 
 ## C Example (Chatting client)
 
@@ -185,6 +172,40 @@ Documentation will come soon.
 			finally{ cli.close(); }
 		}
 	}
+
+## Java Example (Another chatting client with higher level API)
+
+	package com.aleozlx;
+	import com.aleozlx.pacswitch.*;
+
+	public class Messager extends PacswitchMessager {
+		public static void main(String[] args) {
+			Messager m=new Messager();
+			if(m.connect("public","public")&&m.isAuthenticated()){
+				try{ 
+					/*Calling `send` here will invoke `handleMessage` method
+					on the other side, and this returns the same String 
+					`handleMessage` remotely returns.*/
+					System.out.println(m.send("public","Hello world!")); 
+
+				}
+				catch(PacswitchException e){ e.printStackTrace(); }
+				finally{ m.close(); }
+			}
+			else System.out.println("Network error");
+		}
+
+		public boolean connect(String userid,String password){
+			return super.connect(userid,password,null,"222.69.93.107","messager1.0");
+		}
+
+		@Override
+		public String handleMessage(String from, String message){
+			System.out.println(String.format("%1$s: %2$s",from,message));
+			return "ACK";
+		}
+	}
+
 
 # Server Dependencies:
 - Mysql connector
