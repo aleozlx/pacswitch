@@ -111,7 +111,7 @@ public abstract class PacswitchMessager extends PacswitchClient {
 									/*
 			create socket and initialize it
 			initiate new thread and call acceptSocket
-			put message to response the invite code to other side
+			response the invite code to other side
 			*/
 					}
 				}
