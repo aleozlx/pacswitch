@@ -1,9 +1,7 @@
 // Fork me on GitHub! https://github.com/aleozlx/pacswitch
 package com.aleozlx.pacswitch;
-import java.lang.*;
 import java.util.*;
 import java.io.*;
-import java.net.*;
 
 /**
  * PacswitchMessager
@@ -57,6 +55,7 @@ public abstract class PacswitchMessager extends PacswitchClient {
 	 */
 	public boolean connect(String userid,String password,String device,String host,String clienttype){
 		this.device=device;
+		this._isAuthenticated.reset();
 		if(!this.pacInit(userid,password,host,clienttype))return false;
 		else{ this.start(); this._isAuthenticated.value=Synchronizer.NOT_AVAILABLE; return true; }
 	}

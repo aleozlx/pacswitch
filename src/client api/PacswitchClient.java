@@ -2,7 +2,6 @@
 package com.aleozlx.pacswitch;
 import java.io.*;
 import java.net.*;
-import java.lang.*;
 
 /**
  * Pacswitch client
@@ -101,6 +100,7 @@ public abstract class PacswitchClient {
 	 */
 	public final boolean pacInit(String user,String password,String host,String clienttype){
 		try{
+			this.closeSocket();
 			socket=new Socket(host,port);
 			this.user=user;
 			this.password=password;

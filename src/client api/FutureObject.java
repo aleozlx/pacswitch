@@ -8,6 +8,7 @@ import java.util.concurrent.*;
  */
 public class FutureObject<V> implements Future<V>{
 	protected V value=null;
+	private V initvalue=null;
 	protected boolean _isAvailable=false;
 	protected boolean _isCancelled=false;
 	protected boolean _pendingCancellation=false;
@@ -15,8 +16,15 @@ public class FutureObject<V> implements Future<V>{
 	protected String tag="";
 	protected PacswitchException exception=null;
 
-	public FutureObject(){ this.value=null; }
-	public FutureObject(V init){ this.value=init; }
+	public FutureObject(){ initvalue=null; this.reset(); }
+	public FutureObject(V init){ initvalue=init; this.reset(); }
+	public void reset(){
+		this.value=initvalue;
+		this._isAvailable=false;
+		this._isCancelled=false;
+		this._pendingCancellation=false;
+		this.exception=null;
+	}
 
 	@Override
 	public boolean cancel(boolean mayInterruptIfRunning){
