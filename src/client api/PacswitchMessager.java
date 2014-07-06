@@ -6,6 +6,7 @@ import java.io.*;
 /**
  * PacswitchMessager
  * @author Alex
+ * @version 1.2.2
  * @since June 27, 2014
  */
 public abstract class PacswitchMessager extends PacswitchClient {

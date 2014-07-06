@@ -6,7 +6,7 @@ import java.net.*;
 /**
  * Pacswitch client
  * @author Alex
- * @version 1.2.1
+ * @version 1.2.2
  * @since June 3, 2014
  */
 public abstract class PacswitchClient {
