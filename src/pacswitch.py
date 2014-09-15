@@ -48,7 +48,7 @@ def debug(msg,system='pacswitch'):
 	if ENABLE_LOGFILE: log.msg(strmsg,system=system)
 	if ENABLE_TERMINAL_EVENT_FEED:
 		for s in terminals:
-			try: s.sendLine('[{0}] '.format(system),strmsg)
+			try: s.sendLine('{2} [{0}] {1}'.format(system,strmsg,int(timemark())))
 			except: pass
 
 # database infrastructure
@@ -213,6 +213,13 @@ class PacServer(protocol.Protocol,object):
 			pointer=ss[0]
 			UserDB.setpointer(self.name,pointer)
 
+	@authenticated
+	def LOOKUP(self, line):
+		ss=line.split('\x20')
+		if len(ss)==1:
+			q=UserDB.getpointer(ss[0].strip())
+			self.easyResponse('LOOKUP',bool(q))
+
 	def REGISTER(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
@@ -238,7 +245,7 @@ class PacServer(protocol.Protocol,object):
 				streams[srcid],streams[dstid]=None,None
 				# TODO expire it after 10s if unused
 				break
-		self.response('STREAM','\x20'.join((srcid,dstid)))
+		self.response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
 
 	def BIN(self, line):
 		ss=line.split('\x20')
@@ -256,8 +263,8 @@ class PacServer(protocol.Protocol,object):
 
 	pRule=re.compile(r'^([A-Z]+)(\s+(.*)|)') # Command gramma
 	def dataReceived(self, data):
-		"""Analyzes data packets and switch'em to another client"""
-		self.recvBuffer += data # Accumulate data till at least one integrate packet appear
+		"""Analyze data packets and switch'em to another client"""
+		self.recvBuffer += data # Accumulate data till at least one integrate packet appears
 		# Buffer size limited down to 5MB to prevent server from potential attack
 		if len(self.recvBuffer)>5242880: 
 			self.transport.loseConnection()
@@ -366,7 +373,14 @@ class PacAdmin(LineOnlyReceiver):
 class PacAdminFactory(protocol.Factory):
 	def buildProtocol(self, addr): return PacAdmin()
 
+# class P2pDataSwitch(protocol.DatagramProtocol):
+# 	def datagramReceived(self, data, (host, port)):
+# 		if data.startswith('+'):
+# 			user,addr=data.lstrip('+').split('@')
+# 			mycrew[user]=Member(addr)
+
 if ENABLE_LOGFILE: log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
-reactor.listenTCP(3512, PacServerFactory()) # Data port
+# reactor.listenUDP(3513, P2pDataSwitch())
+reactor.listenTCP(3512, PacServerFactory()) # Message port
 reactor.listenTCP(3511, PacAdminFactory()) # Admin port
 reactor.run()

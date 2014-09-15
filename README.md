@@ -8,6 +8,9 @@ requiring your account to access.
 
 Fork me on GitHub! https://github.com/aleozlx/pacswitch
 
+And feel free to pay a visit to our client API for java:
+https://github.com/aleozlx/pacscli4java
+
 # Features:
 - Processing bandwidth about 30MB/s [lo interface speed test]
 - Simple protocol that only takes about 50 lines to implement a client with C language.
