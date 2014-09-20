@@ -17,7 +17,7 @@ Dependencies:
 """
 
 # standard library
-import re,types,time,functools,random
+import re,types,time,functools,random,struct,heapq
 from time import time as timemark
 
 # mysql
@@ -113,10 +113,10 @@ class StreamTracker(object):
 	Basiclly, data structure here can be illustrated as follow:
 
 	self.streams={
-		'clienttype0:username0':[stream0,stream1,...],
-		'clienttype0:username1':[stream0,stream1,...],
-		'clienttype1:username0':[stream0,stream1,...],
-		'clienttype1:username1':[stream0,stream1,...],
+		'clienttype0:username0':set([stream0,stream1,...]),
+		'clienttype0:username1':set([stream0,stream1,...]),
+		'clienttype1:username0':set([stream0,stream1,...]),
+		'clienttype1:username1':set([stream0,stream1,...]),
 		...
 	}
 
@@ -128,8 +128,7 @@ class StreamTracker(object):
 	def __setitem__(self,key,val):
 		if key in self.streams: self.streams[key].add(val)
 		else: self.streams[key]=set([val])
-	def __delitem__(self,keyandstream):
-		key,stream=keyandstream
+	def __delitem__(self,(key,stream)):
 		if key in self.streams and stream in self.streams[key]: self.streams[key].remove(stream)
 		if not self.streams[key]: del self.streams[key]
 	def __getitem__(self,key):
@@ -234,6 +233,7 @@ class PacServer(protocol.Protocol,object):
 			oldpasswd,newpasswd=ss[0],ss[1]
 			self.easyResponse('PASSWD',UserDB.setpassword(self.name,oldpasswd,newpasswd))
 
+	@authenticated
 	def TEST(self, line):
 		self.easyResponse('TEST',True)
 
@@ -247,16 +247,16 @@ class PacServer(protocol.Protocol,object):
 				break
 		self.response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
 
-	def BIN(self, line):
-		ss=line.split('\x20')
-		if len(ss)==2:
-			srcid,dstid=ss[0],ss[1]
-			if srcid in streams and streams[srcid]==None and dstid in streams:
-				self.massive,self.binary=True,True
-				streams[srcid]=self.transport
+	# def BIN(self, line):
+	# 	ss=line.split('\x20')
+	# 	if len(ss)==2:
+	# 		srcid,dstid=ss[0],ss[1]
+	# 		if srcid in streams and streams[srcid]==None and dstid in streams:
+	# 			self.massive,self.binary=True,True
+	# 			streams[srcid]=self.transport
 
 	def response(self, title, msg):
-		self.transport.write(''.join([PACKAGE_START,'pacswitch> ',title,': ',msg,PACKAGE_END]))
+		self.transport.write(''.join([PACKAGE_START,'pacswitch>\x20',title,':\x20',msg,PACKAGE_END]))
 
 	def easyResponse(self, title, q):
 		self.response(title,'OK' if q else 'Failed')
@@ -355,7 +355,7 @@ class PacAdmin(LineOnlyReceiver):
 		if len(args)==1 and args[0]=='show':
 			smap=streams.asDict()
 			for sn in smap: 
-				self.sendLine('{0} -> {1}'.format(sn,' '.join('#'+str(s.fileno()) for s in smap[sn])))
+				self.sendLine('{0} -> {1}'.format(sn,'\x20'.join('#'+str(s.fileno()) for s in smap[sn])))
 			self.sendLine('{0} stream(s) active.'.format(streams.totalStreams()))
 		elif len(args)==2 and args[0]=='kill':
 			try:
@@ -379,8 +379,9 @@ class PacAdminFactory(protocol.Factory):
 # 			user,addr=data.lstrip('+').split('@')
 # 			mycrew[user]=Member(addr)
 
-if ENABLE_LOGFILE: log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
-# reactor.listenUDP(3513, P2pDataSwitch())
-reactor.listenTCP(3512, PacServerFactory()) # Message port
-reactor.listenTCP(3511, PacAdminFactory()) # Admin port
-reactor.run()
+if __name__ == '__main__':
+	if ENABLE_LOGFILE: log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
+	# reactor.listenUDP(3513, P2pDataSwitch())
+	reactor.listenTCP(3512, PacServerFactory()) # Message port
+	reactor.listenTCP(3511, PacAdminFactory()) # Admin port
+	reactor.run()
