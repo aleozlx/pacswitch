@@ -1,3 +1,4 @@
+import time
 import mysql.connector
 
 # database infrastructure
@@ -20,9 +21,9 @@ class mycnx:
 def myexec(conn,stmt,dat):
 	if conn.mycur==None: conn.mycur=conn.cursor(buffered=True)
 	try: 
-		t1=timemark()
+		t1=time.time()
 		conn.mycur.execute(stmt,dat)
-		debug(lambda:'raw ({0}ms) '.format(round((timemark()-t1)*1000,2))+(stmt%dat if dat else stmt),'mysql')
+		debug(lambda:'raw ({0}ms) '.format(round((time.time()-t1)*1000,2))+(stmt%dat if dat else stmt),'mysql')
 	except Exception,e: 
 		debug(lambda:str(e),'mysql')
 		return False

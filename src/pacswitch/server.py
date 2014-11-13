@@ -1,15 +1,28 @@
-import re,types,time,random,struct,heapq
-from time import time as timemark
+import admin
+import re,types,time,random
 from utils import authenticated
-from types import StreamTracker
-
+from trackers import StreamTracker
 from twisted.python import log
-from twisted.python.logfile import DailyLogFile
 from twisted.internet import protocol, reactor
 
 # pacswitch protocol constants
 PACKAGE_START  =  "\x05ALXPACSVR"
 PACKAGE_END    =  "\x17CESTFINI\x04"
+
+# options
+ENABLE_TERMINAL_EVENT_FEED = False
+LOGFILE_FULLPATH = None
+ADMIN_KEY = None
+getConnection = None
+
+def debug(msgf,system='pacswitch'): 
+	if ENABLE_LOGFILE or ENABLE_TERMINAL_EVENT_FEED:
+		strmsg=msgf()
+		if ENABLE_LOGFILE: log.msg(strmsg,system=system)
+		if ENABLE_TERMINAL_EVENT_FEED:
+			for s in admin.terminals:
+				try: s.sendLine('{2} [{0}] {1}'.format(system,strmsg,int(time.time())))
+				except: pass
 
 streams=StreamTracker()
 
@@ -23,7 +36,6 @@ class PacServer(protocol.Protocol,object):
 		self.clienttype=''
 		self.streamName=''
 		self.auth=False
-		self.binary=False
 		self.totalsize=0
 		self.massive=False
 
@@ -117,7 +129,6 @@ class PacServer(protocol.Protocol,object):
 	# 	if len(ss)==2:
 	# 		srcid,dstid=ss[0],ss[1]
 	# 		if srcid in streams and streams[srcid]==None and dstid in streams:
-	# 			self.massive,self.binary=True,True
 	# 			streams[srcid]=self.transport
 
 	def response(self, title, msg):
@@ -170,12 +181,26 @@ class PacServer(protocol.Protocol,object):
 						try: s.write(''.join([PACKAGE_START,self.name,'>\x20',fdata[iI+1:],PACKAGE_END]))
 						except: debug(lambda:'Transmissioin failure')
 
-class PacServerFactory(protocol.Factory):
+class ServerFactory(protocol.Factory):
 	def buildProtocol(self, addr): return PacServer()
 
-def run():
-	if ENABLE_LOGFILE: log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
+def run(**options):
+	global ENABLE_TERMINAL_EVENT_FEED
+	global LOGFILE_FULLPATH
+	global ADMIN_KEY
+	global getConnection
+
+	if 'ENABLE_TERMINAL_EVENT_FEED' in options: ENABLE_TERMINAL_EVENT_FEED=options['ENABLE_TERMINAL_EVENT_FEED']
+	if 'LOGFILE_FULLPATH' in options: LOGFILE_FULLPATH=options['LOGFILE_FULLPATH']
+	if 'ADMIN_KEY' in options: ADMIN_KEY=options['ADMIN_KEY']
+	if 'getConnection' in options: getConnection=options['getConnection']
+
+	if LOGFILE_FULLPATH: 
+		from twisted.python.logfile import DailyLogFile
+		log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
+
+	if ADMIN_KEY: reactor.listenTCP(3511, admin.Factory())
+
 	# reactor.listenUDP(3513, P2pDataSwitch())
-	reactor.listenTCP(3512, PacServerFactory()) # Message port
-	reactor.listenTCP(3511, PacAdminFactory()) # Admin port
+	reactor.listenTCP(3512, ServerFactory())
 	reactor.run()

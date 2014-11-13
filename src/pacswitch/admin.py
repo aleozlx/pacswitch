@@ -1,11 +1,8 @@
 import re
-
 from utils import authenticated
-
 from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import protocol
 
-# telnet terminals
 terminals=list()
 
 class PacAdmin(LineOnlyReceiver):
@@ -67,6 +64,6 @@ class PacAdmin(LineOnlyReceiver):
 							return
 			except: self.sendLine('Failed')
 
-class PacAdminFactory(protocol.Factory):
+class Factory(protocol.Factory):
 	def buildProtocol(self, addr): return PacAdmin()
 

@@ -1,4 +1,4 @@
-import re,types,time,functools,random,struct,heapq
+import random,struct,heapq
 from time import time as timemark
 from twisted.internet import protocol, reactor
 from twisted.python import log
