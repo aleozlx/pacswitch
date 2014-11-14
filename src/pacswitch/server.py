@@ -1,5 +1,5 @@
-import admin
-import re,types,time,random
+import admin,db
+import re,types,time,random,traceback
 from utils import authenticated
 from trackers import StreamTracker
 from twisted.python import log
@@ -11,9 +11,7 @@ PACKAGE_END    =  "\x17CESTFINI\x04"
 
 # options
 ENABLE_TERMINAL_EVENT_FEED = False
-LOGFILE_FULLPATH = None
-ADMIN_KEY = None
-getConnection = None
+ENABLE_LOGFILE = False
 
 def debug(msgf,system='pacswitch'): 
 	if ENABLE_LOGFILE or ENABLE_TERMINAL_EVENT_FEED:
@@ -63,7 +61,7 @@ class PacServer(protocol.Protocol,object):
 		if self.auth==False:
 			ss=line.split('\x20')
 			userid,passwd,self.clienttype=ss[0],ss[1],(ss[2] if len(ss)>=3 else '')
-			q=UserDB.checkauth(userid,passwd)
+			q=db.UserDB.checkauth(userid,passwd)
 			if q: 
 				self.name=userid
 				self.auth=True
@@ -81,19 +79,19 @@ class PacServer(protocol.Protocol,object):
 	def POINTER(self, line):
 		ss=line.split('\x20')
 		if len(ss)==0:
-			q=UserDB.getpointer(self.name)
+			q=db.UserDB.getpointer(self.name)
 			if q: 
 				userid,pointer=q
 				self.response('POINTER',pointer)
 		else:
 			pointer=ss[0]
-			UserDB.setpointer(self.name,pointer)
+			db.UserDB.setpointer(self.name,pointer)
 
 	@authenticated
 	def LOOKUP(self, line):
 		ss=line.split('\x20')
 		if len(ss)==1:
-			q=UserDB.getpointer(ss[0].strip())
+			q=db.UserDB.getpointer(ss[0].strip())
 			self.easyResponse('LOOKUP',bool(q))
 
 	def REGISTER(self, line):
@@ -101,14 +99,18 @@ class PacServer(protocol.Protocol,object):
 		if len(ss)==2:
 			userid,password=ss[0],ss[1]
 			if userid!='pacswitch': 
-				self.easyResponse('REGISTER',UserDB.adduser(userid,password))
+				self.easyResponse('REGISTER',db.UserDB.adduser(userid,password))
 
 	@authenticated
 	def PASSWD(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			oldpasswd,newpasswd=ss[0],ss[1]
-			self.easyResponse('PASSWD',UserDB.setpassword(self.name,oldpasswd,newpasswd))
+			self.easyResponse('PASSWD',db.UserDB.setpassword(self.name,oldpasswd,newpasswd))
+
+	@authenticated
+	def REMOVE(self, line):
+		self.easyResponse('REMOVE',db.UserDB.deluser(self.name))
 
 	@authenticated
 	def TEST(self, line):
@@ -165,7 +167,7 @@ class PacServer(protocol.Protocol,object):
 						if foo and type(foo) is types.MethodType: foo(match.expand(r'\2').strip())
 						else: raise Exception()
 					except Exception, e: 
-						debug(lambda:'Malformed request: {0}'.format(li))
+						debug(lambda:'Malformed request: {0}\n{1}'.format(li,traceback.format_exc()))
 						time.sleep(0.8)	# Control pace of potential attack	
 			elif self.auth:
 				# Packets switching
@@ -185,21 +187,28 @@ class ServerFactory(protocol.Factory):
 	def buildProtocol(self, addr): return PacServer()
 
 def run(**options):
-	global ENABLE_TERMINAL_EVENT_FEED
-	global LOGFILE_FULLPATH
-	global ADMIN_KEY
-	global getConnection
+	if 'ENABLE_TERMINAL_EVENT_FEED' in options: 
+		global ENABLE_TERMINAL_EVENT_FEED
+		ENABLE_TERMINAL_EVENT_FEED=options['ENABLE_TERMINAL_EVENT_FEED']
 
-	if 'ENABLE_TERMINAL_EVENT_FEED' in options: ENABLE_TERMINAL_EVENT_FEED=options['ENABLE_TERMINAL_EVENT_FEED']
-	if 'LOGFILE_FULLPATH' in options: LOGFILE_FULLPATH=options['LOGFILE_FULLPATH']
-	if 'ADMIN_KEY' in options: ADMIN_KEY=options['ADMIN_KEY']
-	if 'getConnection' in options: getConnection=options['getConnection']
-
-	if LOGFILE_FULLPATH: 
+	if 'LOGFILE_FULLPATH' in options: 
 		from twisted.python.logfile import DailyLogFile
-		log.startLogging(DailyLogFile.fromFullPath(LOGFILE_FULLPATH),setStdout=False)
+		global ENABLE_LOGFILE
+		ENABLE_LOGFILE = True
+		log.startLogging(
+			DailyLogFile.fromFullPath(options['LOGFILE_FULLPATH']),
+			setStdout=False
+		)
 
-	if ADMIN_KEY: reactor.listenTCP(3511, admin.Factory())
+	if 'ADMIN_KEY' in options: 
+		admin.ADMIN_KEY=options['ADMIN_KEY']
+		reactor.listenTCP(3511, admin.Factory())
+
+	assert 'DB_CONNECTION' in options
+	import mysql.connector
+	db.getConnection=lambda:mysql.connector.connect(**options['DB_CONNECTION'])
+	db.debug=debug
+	admin.UserDB=db.UserDB
 
 	# reactor.listenUDP(3513, P2pDataSwitch())
 	reactor.listenTCP(3512, ServerFactory())

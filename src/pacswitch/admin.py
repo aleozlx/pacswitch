@@ -1,4 +1,4 @@
-import re
+import re,types
 from utils import authenticated
 from twisted.protocols.basic import LineOnlyReceiver
 from twisted.internet import protocol

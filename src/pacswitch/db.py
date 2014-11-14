@@ -1,5 +1,4 @@
 import time
-import mysql.connector
 
 # database infrastructure
 # ===========================================
@@ -53,6 +52,8 @@ class UserDB(PacswitchDB):
 	def setpointer(userid,pointer): return ezdml("UPDATE `user` SET pointer=%s WHERE userid=%s",(pointer,userid))
 	@staticmethod
 	def adduser(userid,password): return ezdml("INSERT INTO `user` VALUES(%s,%s,'')",(userid,password))
+	@staticmethod
+	def deluser(userid): return ezdml("DELETE FROM `user` WHERE userid=%s",(userid,))
 	@staticmethod
 	def setpassword(userid,oldpasswd,newpasswd): return ezdml("UPDATE `user` SET password=%s WHERE userid=%s AND password=%s",(newpasswd,userid,oldpasswd))
 	@staticmethod
