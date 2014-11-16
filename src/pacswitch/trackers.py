@@ -15,17 +15,23 @@ class StreamTracker(object):
 	def __init__(self):
 		super(StreamTracker, self).__init__()
 		self.streams=dict()
+		
 	def __setitem__(self,key,val):
 		if key in self.streams: self.streams[key].add(val)
 		else: self.streams[key]=set([val])
+		
 	def __delitem__(self,(key,stream)):
 		if key in self.streams and stream in self.streams[key]: self.streams[key].remove(stream)
 		if not self.streams[key]: del self.streams[key]
+		
 	def __getitem__(self,key):
 		return self.streams[key] if key in self.streams else set()
+		
 	def __contains__(self,key):
 		return key in self.streams
+		
 	def asDict(self):
 		return self.streams
+		
 	def totalStreams(self):
 		return sum(len(self.streams[sn]) for sn in self.streams)

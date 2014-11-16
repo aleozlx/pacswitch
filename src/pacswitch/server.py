@@ -9,11 +9,17 @@ from twisted.internet import epollreactor
 epollreactor.install()
 from twisted.internet import reactor
 
-# pacswitch protocol constants
+# pacswitch protocol
 PACKAGE_START  =  "\x05ALXPACSVR"
 PACKAGE_END    =  "\x17CESTFINI\x04"
 
-# options
+call = lambda *strs: ''.join([PACKAGE_START,'\x02(TXTPAC)\n','\x20'.join(strs),PACKAGE_END])
+data = lambda recv,dat: ''.join([PACKAGE_START,recv,'\n',dat,PACKAGE_END])
+relay = lambda recv,dat: ''.join([PACKAGE_START,recv,'>\x20',dat,PACKAGE_END])
+response = lambda title,msg: ''.join([PACKAGE_START,'pacswitch>\x20',title,':\x20',msg,PACKAGE_END])
+easyResponse = lambda title,q: response(title,'OK' if q else 'Failed')
+
+# default options
 ENABLE_TERMINAL_EVENT_FEED = False
 ENABLE_LOGFILE = False
 
@@ -29,8 +35,10 @@ def debug(msgf,system='pacswitch'):
 streams=StreamTracker()
 
 def tcpGC():
+	TEST = easyResponse('TEST',True)
+	debug(lambda:'tcpGC')
 	for sname,s in set(((ss,stream) for ss in streams for stream in streams[ss])):
-		try: s.write(''.join([PACKAGE_START,'pacswitch>\x20TEST:\x20OK',PACKAGE_END]))
+		try: s.write(TEST)
 		except:
 			debug(lambda:'GC dead stream: {0}'.format(sname))
 			try:
@@ -50,7 +58,6 @@ class PacServer(protocol.Protocol,object):
 		self.streamName=''
 		self.auth=False
 		self.totalsize=0
-		self.massive=False
 
 	@property
 	def name(self): return self._name
@@ -64,7 +71,6 @@ class PacServer(protocol.Protocol,object):
 	def updateSize(self,value):
 		"""Update total size of data transmitted through this stream"""
 		self.totalsize+=value
-		if self.totalsize>524288: self.massive=True
 
 	def connectionLost(self, reason):
 		if self.streamName in streams: 
@@ -84,11 +90,7 @@ class PacServer(protocol.Protocol,object):
 				debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
 			else:
 				debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
-			return self.easyResponse('LOGIN',q)
-
-	def MASS(self, line):
-		""""MASS" command: Declare a massive data transmissioin"""
-		self.massive=True
+			return easyResponse('LOGIN',q)
 
 	@authenticated
 	def POINTER(self, line):
@@ -97,7 +99,7 @@ class PacServer(protocol.Protocol,object):
 			q=db.UserDB.getpointer(self.name)
 			if q: 
 				userid,pointer=q
-				return self.response('POINTER',pointer)
+				return response('POINTER',pointer)
 		else:
 			pointer=ss[0]
 			db.UserDB.setpointer(self.name,pointer)
@@ -107,29 +109,29 @@ class PacServer(protocol.Protocol,object):
 		ss=line.split('\x20')
 		if len(ss)==1:
 			q=db.UserDB.getpointer(ss[0].strip())
-			return self.easyResponse('LOOKUP',bool(q))
+			return easyResponse('LOOKUP',bool(q))
 
 	def REGISTER(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			userid,password=ss[0],ss[1]
 			if userid!='pacswitch': 
-				return self.easyResponse('REGISTER',db.UserDB.adduser(userid,password))
+				return easyResponse('REGISTER',db.UserDB.adduser(userid,password))
 
 	@authenticated
 	def PASSWD(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			oldpasswd,newpasswd=ss[0],ss[1]
-			return self.easyResponse('PASSWD',db.UserDB.setpassword(self.name,oldpasswd,newpasswd))
+			return easyResponse('PASSWD',db.UserDB.setpassword(self.name,oldpasswd,newpasswd))
 
 	@authenticated
 	def REMOVE(self, line):
-		return self.easyResponse('REMOVE',db.UserDB.deluser(self.name))
+		return easyResponse('REMOVE',db.UserDB.deluser(self.name))
 
 	@authenticated
 	def TEST(self, line):
-		return self.easyResponse('TEST',True)
+		return easyResponse('TEST',True)
 
 	# @authenticated
 	# def STREAM(self, line):
@@ -139,20 +141,7 @@ class PacServer(protocol.Protocol,object):
 	# 			streams[srcid],streams[dstid]=None,None
 	# 			# TODO expire it after 10s if unused
 	# 			break
-	# 	self.response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
-
-	# def BIN(self, line):
-	# 	ss=line.split('\x20')
-	# 	if len(ss)==2:
-	# 		srcid,dstid=ss[0],ss[1]
-	# 		if srcid in streams and streams[srcid]==None and dstid in streams:
-	# 			streams[srcid]=self.transport
-
-	def response(self, title, msg):
-		return ''.join([PACKAGE_START,'pacswitch>\x20',title,':\x20',msg,PACKAGE_END])
-
-	def easyResponse(self, title, q):
-		return self.response(title,'OK' if q else 'Failed')
+	# 	response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
 
 	pRule=re.compile(r'^([A-Z]+)(\s+(.*)|)') # Command gramma
 	def dataReceived(self, data):
@@ -181,10 +170,10 @@ class PacServer(protocol.Protocol,object):
 						methodname=match.expand(r'\1')
 						foo=getattr(self, methodname, None)
 						assert foo and type(foo) is types.MethodType
-						def response(s=''):
+						def res(s=''):
 							if s: self.transport.write(s)
 						d=threads.deferToThread(lambda:foo(match.expand(r'\2').strip()))
-						d.addCallback(response)
+						d.addCallback(res)
 					except Exception, e: 
 						debug(lambda:'Malformed request: {0}\n{1}'.format(li,traceback.format_exc()))
 						time.sleep(0.8)	# Control pace of potential attack
@@ -197,10 +186,9 @@ class PacServer(protocol.Protocol,object):
 					if recv_streams:
 						datasize=len(fdata)-h_iI-1
 						self.updateSize(datasize)
-						if not self.massive: # Keep record of the transmittion
-							debug(lambda:'{0} -> {1} * {2} {3}B'.format(self.streamName,name,len(recv_streams),datasize))
+						# debug(lambda:'{0} -> {1} * {2} {3}B'.format(self.streamName,name,len(recv_streams),datasize))
 						for s in recv_streams: # Broadcast down to all clients with same account same clienttype
-							try: s.write(''.join([PACKAGE_START,self.name,'>\x20',fdata[h_iI+1:],PACKAGE_END]))
+							try: s.write(relay(self.name,fdata[h_iI+1:]))
 							except: debug(lambda:'Transmissioin failure')
 				threads.deferToThread(handler)
 
@@ -211,7 +199,6 @@ def run(**options):
 	if 'ENABLE_TERMINAL_EVENT_FEED' in options: 
 		global ENABLE_TERMINAL_EVENT_FEED
 		ENABLE_TERMINAL_EVENT_FEED=options['ENABLE_TERMINAL_EVENT_FEED']
-
 	if 'LOGFILE_FULLPATH' in options: 
 		from twisted.python.logfile import DailyLogFile
 		global ENABLE_LOGFILE
@@ -220,17 +207,14 @@ def run(**options):
 			DailyLogFile.fromFullPath(options['LOGFILE_FULLPATH']),
 			setStdout=False
 		)
-
 	if 'ADMIN_KEY' in options: 
 		admin.ADMIN_KEY=options['ADMIN_KEY']
 		reactor.listenTCP(3511, admin.Factory())
-
 	assert 'DB_CONNECTION' in options
 	import mysql.connector
 	db.getConnection=lambda:mysql.connector.connect(**options['DB_CONNECTION'])
 	db.debug=debug
 	admin.UserDB=db.UserDB
-
 	# reactor.listenUDP(3513, P2pDataSwitch())
 	reactor.listenTCP(3512, ServerFactory())
 	reactor.callLater(900, tcpGC)
