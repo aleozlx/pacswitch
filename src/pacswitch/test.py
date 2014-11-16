@@ -164,7 +164,6 @@ TODO:
 2. Admin site
 	http://blog.csdn.net/raptor/article/details/5602878
 3. remove unnecessary logs, server members
-4. async feature: log, lookup, ...
 """
 
 if __name__ == '__main__':

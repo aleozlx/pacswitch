@@ -3,7 +3,11 @@ import re,types,time,random,traceback
 from utils import authenticated
 from trackers import StreamTracker
 from twisted.python import log
-from twisted.internet import protocol, reactor
+from twisted.internet import protocol, defer
+
+from twisted.internet import epollreactor
+epollreactor.install()
+from twisted.internet import reactor
 
 # pacswitch protocol constants
 PACKAGE_START  =  "\x05ALXPACSVR"
@@ -168,6 +172,7 @@ class PacServer(protocol.Protocol,object):
 				continue
 			fdata = self.recvBuffer[iI+len(PACKAGE_START):iII]
 			self.recvBuffer = self.recvBuffer[iII+len(PACKAGE_END):]
+			
 			if fdata.startswith('\x02(TXTPAC)\n'): 
 				# Text based protocol now
 				for li in fdata.split('\n')[1:]:

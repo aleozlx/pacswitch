@@ -26,8 +26,8 @@ def myexec(conn,stmt,dat):
 	except Exception,e: 
 		debug(lambda:str(e),'mysql')
 		return False
-	else: return True	
-def myquery(conn,stmt,dat): 
+	else: return True
+def myquery(conn,stmt,dat):
 	return [i for i in conn.mycur] if myexec(conn,stmt,dat) else []
 def myqueryone(conn,stmt,dat): 
 	q=myquery(conn,stmt,dat)
