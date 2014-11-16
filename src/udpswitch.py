@@ -1,5 +1,4 @@
-import random,struct,heapq
-from time import time as timemark
+import random,struct,heapq,time
 from twisted.internet import protocol, reactor
 from twisted.python import log
 from twisted.python.logfile import DailyLogFile
@@ -7,7 +6,7 @@ from twisted.python.logfile import DailyLogFile
 udpstreams=dict()
 
 def udpGC():
-	t_now=timemark()
+	t_now=time.time()
 	# log.msg('udpGC tick '+str(t_now)+' '+str([(key,udpstreams[key][1]) for key in udpstreams]))
 	for k in [key for key in udpstreams if t_now-udpstreams[key][1] > 45.0]:
 		# log.msg('udpGC '+str(k))
@@ -25,8 +24,8 @@ class UDPSwitch(protocol.DatagramProtocol):
 				self.assignIndex(ep, self.__agingtable[ep][0])
 			else:
 				index=(i for i in UDPSwitch.indices() if i not in udpstreams).next()
-				self.__agingtable[ep]=(index,timemark())
-				udpstreams[index]=(ep,timemark())
+				self.__agingtable[ep]=(index,time.time())
+				udpstreams[index]=(ep,time.time())
 				self.assignIndex(ep, index)
 				while len(self.__agingtable)>20:
 					items=[(self.__agingtable[key][1],key) for key in self.__agingtable]
@@ -38,7 +37,7 @@ class UDPSwitch(protocol.DatagramProtocol):
 			try:
 				to=struct.unpack('>l',data[16:20])[0]
 				ep2=udpstreams[to][0]
-				udpstreams[to]=(ep2,timemark())
+				udpstreams[to]=(ep2,time.time())
 				self.transport.write(data,ep2)
 			except Exception, e:
 				pass

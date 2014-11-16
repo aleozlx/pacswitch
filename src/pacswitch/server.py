@@ -24,6 +24,17 @@ def debug(msgf,system='pacswitch'):
 
 streams=StreamTracker()
 
+def tcpGC():
+	for sname,s in set(((ss,stream) for ss in streams for stream in streams[ss])):
+		try: s.write(''.join([PACKAGE_START,'pacswitch>\x20TEST:\x20OK',PACKAGE_END]))
+		except:
+			debug(lambda:'GC dead stream: {0}'.format(sname))
+			try:
+				del streams[(sname,s)]
+				s.loseConnection()
+			except: pass
+	reactor.callLater(900,tcpGC)
+
 class PacServer(protocol.Protocol,object):
 	"""Pacswitch Server implementation"""
 	def connectionMade(self):
@@ -116,15 +127,15 @@ class PacServer(protocol.Protocol,object):
 	def TEST(self, line):
 		self.easyResponse('TEST',True)
 
-	@authenticated
-	def STREAM(self, line):
-		while 1:
-			srcid,dstid=tuple(''.join(random.choice('qwertyuiopasdfghjklzxcvbnmzy') for i in xrange(20)) for k in xrange(2))
-			if srcid not in streams and dstid not in streams: 
-				streams[srcid],streams[dstid]=None,None
-				# TODO expire it after 10s if unused
-				break
-		self.response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
+	# @authenticated
+	# def STREAM(self, line):
+	# 	while 1:
+	# 		srcid,dstid=tuple(''.join(random.choice('qwertyuiopasdfghjklzxcvbnmzy') for i in xrange(20)) for k in xrange(2))
+	# 		if srcid not in streams and dstid not in streams: 
+	# 			streams[srcid],streams[dstid]=None,None
+	# 			# TODO expire it after 10s if unused
+	# 			break
+	# 	self.response('STREAM','\x20'.join((line.strip(),srcid,dstid)))
 
 	# def BIN(self, line):
 	# 	ss=line.split('\x20')
@@ -212,4 +223,5 @@ def run(**options):
 
 	# reactor.listenUDP(3513, P2pDataSwitch())
 	reactor.listenTCP(3512, ServerFactory())
+	reactor.callLater(900, tcpGC)
 	reactor.run()

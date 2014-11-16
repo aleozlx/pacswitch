@@ -14,7 +14,7 @@ class StreamTracker(object):
 	"""
 	def __init__(self):
 		super(StreamTracker, self).__init__()
-		self.streams=dict()	
+		self.streams=dict()
 	def __setitem__(self,key,val):
 		if key in self.streams: self.streams[key].add(val)
 		else: self.streams[key]=set([val])

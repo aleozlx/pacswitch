@@ -160,12 +160,11 @@ class TestProtocol(unittest.TestCase, Client):
 
 """
 TODO:
-- Admin site
+1. flowmeter/performance monitor
+2. Admin site
 	http://blog.csdn.net/raptor/article/details/5602878
-- remove unnecessary logs, server members
-- flowmeter/performance monitor
-- auto-remove dead links
-- multiprocessing?
+3. remove unnecessary logs, server members
+4. async feature: log, lookup, ...
 """
 
 if __name__ == '__main__':
