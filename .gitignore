@@ -1,9 +1,5 @@
 *.class
+*.pyc
 pacswitch.sublime-project
 pacswitch.sublime-workspace
-src/pacswitch.conf.py
-src/client api/Messager.java
-src/client api/Pactalk.java
-src/client api/doc
-src/client api/eclipse
 

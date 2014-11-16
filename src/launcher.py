@@ -4,7 +4,7 @@ if __name__ == '__main__':
 	# pacswitch.server.run(
 	# 	LOGFILE_FULLPATH = 'your file path for logfile',
 	# 	ADMIN_KEY = '0000',
-	# 	getConnection = lambda:mysql.connector.connect(
+	# 	DB_CONNECTION = dict(
 	# 		host = 'localhost',
 	# 		user = 'admin', 
 	# 		password = 'admin',
