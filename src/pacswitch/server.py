@@ -3,7 +3,7 @@ import re,types,time,random,traceback
 from utils import authenticated
 from trackers import StreamTracker
 from twisted.python import log
-from twisted.internet import protocol, defer
+from twisted.internet import protocol, defer, threads
 
 from twisted.internet import epollreactor
 epollreactor.install()
@@ -84,7 +84,7 @@ class PacServer(protocol.Protocol,object):
 				debug(lambda:'{0} Online opened {1} stream(s)'.format(self.name,len(streams[self.streamName])))
 			else:
 				debug(lambda:"{0} tried to login with password '{1}' and had failed".format(userid,passwd))
-			self.easyResponse('LOGIN',q)
+			return self.easyResponse('LOGIN',q)
 
 	def MASS(self, line):
 		""""MASS" command: Declare a massive data transmissioin"""
@@ -97,7 +97,7 @@ class PacServer(protocol.Protocol,object):
 			q=db.UserDB.getpointer(self.name)
 			if q: 
 				userid,pointer=q
-				self.response('POINTER',pointer)
+				return self.response('POINTER',pointer)
 		else:
 			pointer=ss[0]
 			db.UserDB.setpointer(self.name,pointer)
@@ -107,29 +107,29 @@ class PacServer(protocol.Protocol,object):
 		ss=line.split('\x20')
 		if len(ss)==1:
 			q=db.UserDB.getpointer(ss[0].strip())
-			self.easyResponse('LOOKUP',bool(q))
+			return self.easyResponse('LOOKUP',bool(q))
 
 	def REGISTER(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			userid,password=ss[0],ss[1]
 			if userid!='pacswitch': 
-				self.easyResponse('REGISTER',db.UserDB.adduser(userid,password))
+				return self.easyResponse('REGISTER',db.UserDB.adduser(userid,password))
 
 	@authenticated
 	def PASSWD(self, line):
 		ss=line.split('\x20')
 		if len(ss)==2:
 			oldpasswd,newpasswd=ss[0],ss[1]
-			self.easyResponse('PASSWD',db.UserDB.setpassword(self.name,oldpasswd,newpasswd))
+			return self.easyResponse('PASSWD',db.UserDB.setpassword(self.name,oldpasswd,newpasswd))
 
 	@authenticated
 	def REMOVE(self, line):
-		self.easyResponse('REMOVE',db.UserDB.deluser(self.name))
+		return self.easyResponse('REMOVE',db.UserDB.deluser(self.name))
 
 	@authenticated
 	def TEST(self, line):
-		self.easyResponse('TEST',True)
+		return self.easyResponse('TEST',True)
 
 	# @authenticated
 	# def STREAM(self, line):
@@ -149,10 +149,10 @@ class PacServer(protocol.Protocol,object):
 	# 			streams[srcid]=self.transport
 
 	def response(self, title, msg):
-		self.transport.write(''.join([PACKAGE_START,'pacswitch>\x20',title,':\x20',msg,PACKAGE_END]))
+		return ''.join([PACKAGE_START,'pacswitch>\x20',title,':\x20',msg,PACKAGE_END])
 
 	def easyResponse(self, title, q):
-		self.response(title,'OK' if q else 'Failed')
+		return self.response(title,'OK' if q else 'Failed')
 
 	pRule=re.compile(r'^([A-Z]+)(\s+(.*)|)') # Command gramma
 	def dataReceived(self, data):
@@ -180,24 +180,29 @@ class PacServer(protocol.Protocol,object):
 					try:
 						methodname=match.expand(r'\1')
 						foo=getattr(self, methodname, None)
-						if foo and type(foo) is types.MethodType: foo(match.expand(r'\2').strip())
-						else: raise Exception()
+						assert foo and type(foo) is types.MethodType
+						def response(s=''):
+							if s: self.transport.write(s)
+						d=threads.deferToThread(lambda:foo(match.expand(r'\2').strip()))
+						d.addCallback(response)
 					except Exception, e: 
 						debug(lambda:'Malformed request: {0}\n{1}'.format(li,traceback.format_exc()))
-						time.sleep(0.8)	# Control pace of potential attack	
+						time.sleep(0.8)	# Control pace of potential attack
 			elif self.auth:
-				# Packets switching
-				iI = fdata.find('\n')
-				name=fdata[:iI] 
-				recv_streams=streams[self.getStreamName(name)] # Figure out receiver client
-				if recv_streams:
-					datasize=len(fdata)-iI-1
-					self.updateSize(datasize)
-					if not self.massive: # Keep record of the transmittion
-						debug(lambda:'{0} -> {1} * {2} {3}B'.format(self.streamName,name,len(recv_streams),datasize))
-					for s in recv_streams: # Broadcast down to all clients with same account same clienttype
-						try: s.write(''.join([PACKAGE_START,self.name,'>\x20',fdata[iI+1:],PACKAGE_END]))
-						except: debug(lambda:'Transmissioin failure')
+				def handler():
+					# Packets switching
+					h_iI = fdata.find('\n')
+					name=fdata[:h_iI] 
+					recv_streams=streams[self.getStreamName(name)] # Figure out receiver client
+					if recv_streams:
+						datasize=len(fdata)-h_iI-1
+						self.updateSize(datasize)
+						if not self.massive: # Keep record of the transmittion
+							debug(lambda:'{0} -> {1} * {2} {3}B'.format(self.streamName,name,len(recv_streams),datasize))
+						for s in recv_streams: # Broadcast down to all clients with same account same clienttype
+							try: s.write(''.join([PACKAGE_START,self.name,'>\x20',fdata[h_iI+1:],PACKAGE_END]))
+							except: debug(lambda:'Transmissioin failure')
+				threads.deferToThread(handler)
 
 class ServerFactory(protocol.Factory):
 	def buildProtocol(self, addr): return PacServer()
